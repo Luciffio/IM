@@ -58,6 +58,7 @@ fun PersonaChatScreen(
     date:   LocalDate        = LocalDate.now(),
 ) {
     var showEmojiPanel by remember { mutableStateOf(false) }
+    var inputText      by remember { mutableStateOf("") }
     val keyboard = LocalSoftwareKeyboardController.current
 
     Column(
@@ -74,25 +75,24 @@ fun PersonaChatScreen(
         )
 
         PersonaInputBar(
-            showEmojiPanel  = showEmojiPanel,
-            onEmojiToggle   = {
+            text           = inputText,
+            onTextChange   = { inputText = it },
+            showEmojiPanel = showEmojiPanel,
+            onEmojiToggle  = {
                 showEmojiPanel = !showEmojiPanel
                 if (showEmojiPanel) keyboard?.hide()
+                else keyboard?.show()
             },
-            onSend          = {
-                state.sendMessage(it)
+            onSend = {
+                state.sendMessage(inputText)
+                inputText      = ""
                 showEmojiPanel = false
             },
         )
 
         PersonaEmojiPanel(
             visible      = showEmojiPanel,
-            onEmojiClick = { emoji ->
-                // Append emoji to whatever the user typed — handled via state hoisting below
-                // PersonaInputBar manages text internally; we expose a callback here instead.
-                // For now, send it as a standalone message (same as tapping send).
-                state.sendMessage(emoji)
-            },
+            onEmojiClick = { emoji -> inputText += emoji },
         )
     }
 }
@@ -101,20 +101,12 @@ fun PersonaChatScreen(
 
 @Composable
 private fun PersonaInputBar(
+    text:           String,
+    onTextChange:   (String) -> Unit,
     showEmojiPanel: Boolean,
     onEmojiToggle:  () -> Unit,
-    onSend:         (String) -> Unit,
+    onSend:         () -> Unit,
 ) {
-    val keyboard = LocalSoftwareKeyboardController.current
-    var text by remember { mutableStateOf("") }
-
-    val doSend = {
-        if (text.isNotBlank()) {
-            onSend(text)
-            text = ""
-        }
-    }
-
     Row(
         verticalAlignment     = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -130,7 +122,7 @@ private fun PersonaInputBar(
         // Text field
         BasicTextField(
             value         = text,
-            onValueChange = { text = it },
+            onValueChange = onTextChange,
             singleLine    = true,
             textStyle     = TextStyle(
                 fontFamily = PersonaFont,
@@ -139,7 +131,7 @@ private fun PersonaInputBar(
             ),
             cursorBrush     = SolidColor(Color.Black),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-            keyboardActions = KeyboardActions(onSend = { doSend() }),
+            keyboardActions = KeyboardActions(onSend = { if (text.isNotBlank()) onSend() }),
             decorationBox   = { inner ->
                 Box(
                     contentAlignment = Alignment.CenterStart,
@@ -162,19 +154,16 @@ private fun PersonaInputBar(
             modifier = Modifier.weight(1f),
         )
 
-        // Send button
-        SendButton(
-            enabled = text.isNotBlank(),
-            onClick = { doSend() },
-        )
-
-        // Emoji/sticker toggle — right of Send
+        // [😊] Emoji toggle — right of input, left of Send
         EmojiButton(
             active  = showEmojiPanel,
-            onClick = {
-                onEmojiToggle()
-                if (showEmojiPanel) keyboard?.show()
-            },
+            onClick = onEmojiToggle,
+        )
+
+        // [Send]
+        SendButton(
+            enabled = text.isNotBlank(),
+            onClick = onSend,
         )
     }
 }
