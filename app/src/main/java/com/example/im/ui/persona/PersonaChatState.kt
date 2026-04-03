@@ -105,19 +105,37 @@ class PersonaChatState internal constructor(
     private val allMessages: List<TelegramMessage>,
 ) {
     private var cursor = 0
+    private var nextId = 100L
     private val entryStates = mutableListOf<EntryState>()
     private val _entries = mutableStateOf<List<PersonaEntry>>(emptyList())
     val entries: List<PersonaEntry> get() = _entries.value
 
-    /** Show the next message from the conversation. Call repeatedly (e.g., on a button press). */
+    /** Send a custom outgoing message from the input field. */
+    fun sendMessage(text: String) {
+        if (text.isBlank()) return
+        val msg = TelegramMessage(
+            id         = nextId++,
+            text       = text.trim(),
+            senderId   = 0L,
+            senderName = "Me",
+            timestamp  = System.currentTimeMillis(),
+            isOutgoing = true,
+        )
+        appendMessage(msg)
+    }
+
+    /** Show the next pre-set message from the sample conversation. */
     fun advance() {
         if (cursor >= allMessages.size) {
-            // Loop back to start
             cursor = 0
             entryStates.clear()
         }
 
         val msg = allMessages[cursor++]
+        appendMessage(msg)
+    }
+
+    private fun appendMessage(msg: TelegramMessage) {
         entryStates += createEntryState(entryStates.size, msg)
 
         if (entryStates.size > 1) {
