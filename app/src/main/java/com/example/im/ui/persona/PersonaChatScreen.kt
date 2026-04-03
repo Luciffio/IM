@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -37,10 +38,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -53,6 +57,9 @@ fun PersonaChatScreen(
     onBack: () -> Unit       = {},
     date:   LocalDate        = LocalDate.now(),
 ) {
+    var showEmojiPanel by remember { mutableStateOf(false) }
+    val keyboard = LocalSoftwareKeyboardController.current
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -67,7 +74,25 @@ fun PersonaChatScreen(
         )
 
         PersonaInputBar(
-            onSend = { state.sendMessage(it) },
+            showEmojiPanel  = showEmojiPanel,
+            onEmojiToggle   = {
+                showEmojiPanel = !showEmojiPanel
+                if (showEmojiPanel) keyboard?.hide()
+            },
+            onSend          = {
+                state.sendMessage(it)
+                showEmojiPanel = false
+            },
+        )
+
+        PersonaEmojiPanel(
+            visible      = showEmojiPanel,
+            onEmojiClick = { emoji ->
+                // Append emoji to whatever the user typed — handled via state hoisting below
+                // PersonaInputBar manages text internally; we expose a callback here instead.
+                // For now, send it as a standalone message (same as tapping send).
+                state.sendMessage(emoji)
+            },
         )
     }
 }
@@ -76,8 +101,11 @@ fun PersonaChatScreen(
 
 @Composable
 private fun PersonaInputBar(
-    onSend: (String) -> Unit,
+    showEmojiPanel: Boolean,
+    onEmojiToggle:  () -> Unit,
+    onSend:         (String) -> Unit,
 ) {
+    val keyboard = LocalSoftwareKeyboardController.current
     var text by remember { mutableStateOf("") }
 
     val doSend = {
@@ -88,17 +116,24 @@ private fun PersonaInputBar(
     }
 
     Row(
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment     = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier
             .fillMaxWidth()
             .background(Color.White)
-            .padding(
-                WindowInsets.navigationBars.asPaddingValues()
-            )
+            .padding(WindowInsets.navigationBars.asPaddingValues())
             .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
-        // Text field — fills available width
+        // Emoji toggle button
+        EmojiButton(
+            active  = showEmojiPanel,
+            onClick = {
+                onEmojiToggle()
+                if (showEmojiPanel) keyboard?.show()   // panel closing → show keyboard
+            },
+        )
+
+        // Text field
         BasicTextField(
             value         = text,
             onValueChange = { text = it },
@@ -108,10 +143,10 @@ private fun PersonaInputBar(
                 fontSize   = 15.sp,
                 color      = Color.Black,
             ),
-            cursorBrush = SolidColor(Color.Black),
+            cursorBrush     = SolidColor(Color.Black),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
             keyboardActions = KeyboardActions(onSend = { doSend() }),
-            decorationBox = { inner ->
+            decorationBox   = { inner ->
                 Box(
                     contentAlignment = Alignment.CenterStart,
                     modifier = Modifier
@@ -133,24 +168,73 @@ private fun PersonaInputBar(
             modifier = Modifier.weight(1f),
         )
 
-        // Send button — P5-styled parallelogram
+        // Send button
         SendButton(
-            enabled  = text.isNotBlank(),
-            onClick  = { doSend() },
+            enabled = text.isNotBlank(),
+            onClick = { doSend() },
         )
     }
 }
 
+// ── Emoji toggle button ───────────────────────────────────────────────────────
+
 @Composable
-private fun SendButton(
-    enabled: Boolean,
-    onClick: () -> Unit,
-) {
+private fun EmojiButton(active: Boolean, onClick: () -> Unit) {
+    val density  = LocalDensity.current
+    val fgColor  = if (active) Color.White else Color.Black
+    val bgColor  = if (active) Color.Black else Color.Transparent
+
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .size(40.dp)
+            .drawWithCache {
+                val cx = size.width / 2f
+                val cy = size.height / 2f
+                val r  = size.width * 0.36f
+
+                // Simple smiley face path drawn manually for P5 feel
+                val facePath = Path().apply {
+                    // outer circle approximated as octagon
+                    val pts = 8
+                    for (i in 0 until pts) {
+                        val angle = Math.toRadians((i * 360.0 / pts) - 90)
+                        val x = cx + r * Math.cos(angle).toFloat()
+                        val y = cy + r * Math.sin(angle).toFloat()
+                        if (i == 0) moveTo(x, y) else lineTo(x, y)
+                    }
+                    close()
+                }
+                onDrawBehind {
+                    if (active) drawPath(facePath, Color.Black)
+                    // Eyes
+                    val eyeR = r * 0.13f
+                    drawCircle(fgColor, eyeR, androidx.compose.ui.geometry.Offset(cx - r * 0.3f, cy - r * 0.2f))
+                    drawCircle(fgColor, eyeR, androidx.compose.ui.geometry.Offset(cx + r * 0.3f, cy - r * 0.2f))
+                    // Smile arc approximated with a path
+                    val smilePath = Path().apply {
+                        moveTo(cx - r * 0.35f, cy + r * 0.1f)
+                        quadraticTo(cx, cy + r * 0.55f, cx + r * 0.35f, cy + r * 0.1f)
+                    }
+                    drawPath(smilePath, fgColor, style = androidx.compose.ui.graphics.drawscope.Stroke(width = with(density) { 2.dp.toPx() }))
+                }
+            }
+            .clickable(
+                indication        = null,
+                interactionSource = remember { MutableInteractionSource() },
+                onClick           = onClick,
+            ),
+    ) {}
+}
+
+// ── Send button ───────────────────────────────────────────────────────────────
+
+@Composable
+private fun SendButton(enabled: Boolean, onClick: () -> Unit) {
     val density    = LocalDensity.current
     val bgColor    = if (enabled) Color.Black else Color(0xFF888888)
     val innerColor = if (enabled) Color.White else Color(0xFFBBBBBB)
 
-    // P5-style skewed button shape (parallelogram)
     val shape = GenericShape { size, _ ->
         val skew = with(density) { 6.dp.toPx() }
         moveTo(skew, 0f)
@@ -167,7 +251,6 @@ private fun SendButton(
             .drawBehind {
                 val outerOutline = shape.createOutline(size, layoutDirection, this)
                 drawOutline(outerOutline, bgColor)
-                // Inner inset
                 val innerShape = GenericShape { s, _ ->
                     val skew = with(density) { 6.dp.toPx() }
                     val pad  = with(density) { 2.dp.toPx() }
@@ -181,9 +264,9 @@ private fun SendButton(
             }
             .then(
                 if (enabled) Modifier.clickable(
-                    indication          = null,
-                    interactionSource   = remember { MutableInteractionSource() },
-                    onClick             = onClick,
+                    indication        = null,
+                    interactionSource = remember { MutableInteractionSource() },
+                    onClick           = onClick,
                 ) else Modifier
             )
             .padding(horizontal = 18.dp, vertical = 10.dp),
@@ -197,7 +280,7 @@ private fun SendButton(
     }
 }
 
-// ── Transcript ───────────────────────────────────────────────────────────────
+// ── Transcript ────────────────────────────────────────────────────────────────
 
 @Composable
 fun PersonaTranscript(
@@ -235,7 +318,6 @@ fun PersonaTranscript(
                 entry1 = entry,
                 entry2 = entries.getOrNull(index + 1),
             )
-
             if (entry.message.isOutgoing) {
                 PersonaOutgoingMessage(entry = entry, modifier = lineModifier)
             } else {
