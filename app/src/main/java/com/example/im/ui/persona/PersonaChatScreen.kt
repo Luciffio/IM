@@ -124,14 +124,8 @@ private fun PersonaInputBar(
             .padding(WindowInsets.navigationBars.asPaddingValues())
             .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
-        // Emoji toggle button
-        EmojiButton(
-            active  = showEmojiPanel,
-            onClick = {
-                onEmojiToggle()
-                if (showEmojiPanel) keyboard?.show()   // panel closing → show keyboard
-            },
-        )
+        // [+] Attachment button
+        AttachButton(onClick = { /* TODO: open file picker */ })
 
         // Text field
         BasicTextField(
@@ -173,7 +167,61 @@ private fun PersonaInputBar(
             enabled = text.isNotBlank(),
             onClick = { doSend() },
         )
+
+        // Emoji/sticker toggle — right of Send
+        EmojiButton(
+            active  = showEmojiPanel,
+            onClick = {
+                onEmojiToggle()
+                if (showEmojiPanel) keyboard?.show()
+            },
+        )
     }
+}
+
+// ── Attach button (+) ────────────────────────────────────────────────────────
+
+@Composable
+private fun AttachButton(onClick: () -> Unit) {
+    val density = LocalDensity.current
+
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .size(40.dp)
+            .drawWithCache {
+                val cx    = size.width / 2f
+                val cy    = size.height / 2f
+                val arm   = size.width * 0.28f   // half-length of each arm
+                val thick = with(density) { 3.dp.toPx() }
+
+                // P5 plus sign: two thick rectangles forming a cross
+                val hPath = Path().apply {
+                    moveTo(cx - arm, cy - thick / 2f)
+                    lineTo(cx + arm, cy - thick / 2f)
+                    lineTo(cx + arm, cy + thick / 2f)
+                    lineTo(cx - arm, cy + thick / 2f)
+                    close()
+                }
+                val vPath = Path().apply {
+                    moveTo(cx - thick / 2f, cy - arm)
+                    lineTo(cx + thick / 2f, cy - arm)
+                    lineTo(cx + thick / 2f, cy + arm)
+                    lineTo(cx - thick / 2f, cy + arm)
+                    close()
+                }
+
+                onDrawBehind {
+                    drawPath(hPath, Color.Black)
+                    drawPath(vPath, Color.Black)
+                }
+            }
+            .clickable(
+                indication        = null,
+                interactionSource = remember { MutableInteractionSource() },
+                onClick           = onClick,
+            ),
+    ) {}
 }
 
 // ── Emoji toggle button ───────────────────────────────────────────────────────
