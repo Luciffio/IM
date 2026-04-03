@@ -18,7 +18,10 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -31,6 +34,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -57,43 +61,68 @@ fun PersonaChatScreen(
     onBack: () -> Unit       = {},
     date:   LocalDate        = LocalDate.now(),
 ) {
-    var showEmojiPanel by remember { mutableStateOf(false) }
-    var inputText      by remember { mutableStateOf("") }
+    var showEmojiPanel  by remember { mutableStateOf(false) }
+    var inputText       by remember { mutableStateOf("") }
+    var selectedEntry   by remember { mutableStateOf<PersonaEntry?>(null) }
+    // messageId -> (emoji -> count)
+    val reactions = remember { mutableStateMapOf<Long, MutableMap<String, Int>>() }
     val keyboard = LocalSoftwareKeyboardController.current
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(PersonaRed)
-            .imePadding(),
-    ) {
-        PersonaTopBar(onBack = onBack, date = date)
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(PersonaRed)
+                .imePadding(),
+        ) {
+            PersonaTopBar(onBack = onBack, date = date)
 
-        PersonaTranscript(
-            entries  = state.entries,
-            modifier = Modifier.weight(1f),
-        )
+            PersonaTranscript(
+                entries   = state.entries,
+                reactions = reactions,
+                onLongPress = { entry ->
+                    selectedEntry  = entry
+                    showEmojiPanel = false
+                    keyboard?.hide()
+                },
+                modifier = Modifier.weight(1f),
+            )
 
-        PersonaInputBar(
-            text           = inputText,
-            onTextChange   = { inputText = it },
-            showEmojiPanel = showEmojiPanel,
-            onEmojiToggle  = {
-                showEmojiPanel = !showEmojiPanel
-                if (showEmojiPanel) keyboard?.hide()
-                else keyboard?.show()
-            },
-            onSend = {
-                state.sendMessage(inputText)
-                inputText      = ""
-                showEmojiPanel = false
-            },
-        )
+            PersonaInputBar(
+                text           = inputText,
+                onTextChange   = { inputText = it },
+                showEmojiPanel = showEmojiPanel,
+                onEmojiToggle  = {
+                    showEmojiPanel = !showEmojiPanel
+                    if (showEmojiPanel) keyboard?.hide()
+                    else keyboard?.show()
+                },
+                onSend = {
+                    state.sendMessage(inputText)
+                    inputText      = ""
+                    showEmojiPanel = false
+                },
+            )
 
-        PersonaEmojiPanel(
-            visible      = showEmojiPanel,
-            onEmojiClick = { emoji -> inputText += emoji },
-        )
+            PersonaEmojiPanel(
+                visible      = showEmojiPanel,
+                onEmojiClick = { emoji -> inputText += emoji },
+            )
+        }
+
+        // Context menu overlay
+        selectedEntry?.let { entry ->
+            PersonaMessageMenu(
+                entry        = entry,
+                onDismiss    = { selectedEntry = null },
+                onReact      = { emoji ->
+                    val map = reactions.getOrPut(entry.message.id) { mutableMapOf() }
+                    map[emoji] = (map[emoji] ?: 0) + 1
+                },
+                onAction     = { /* TODO: implement actions */ },
+                onExpandEmoji = { showEmojiPanel = true },
+            )
+        }
     }
 }
 
@@ -319,10 +348,13 @@ private fun SendButton(enabled: Boolean, onClick: () -> Unit) {
 
 // ── Transcript ────────────────────────────────────────────────────────────────
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun PersonaTranscript(
-    entries:  List<PersonaEntry>,
-    modifier: Modifier = Modifier,
+    entries:     List<PersonaEntry>,
+    reactions:   Map<Long, Map<String, Int>> = emptyMap(),
+    onLongPress: (PersonaEntry) -> Unit      = {},
+    modifier:    Modifier = Modifier,
 ) {
     val listState      = rememberLazyListState()
     val totalItemCount by remember { derivedStateOf { listState.layoutInfo.totalItemsCount } }
@@ -355,11 +387,77 @@ fun PersonaTranscript(
                 entry1 = entry,
                 entry2 = entries.getOrNull(index + 1),
             )
-            if (entry.message.isOutgoing) {
-                PersonaOutgoingMessage(entry = entry, modifier = lineModifier)
-            } else {
-                PersonaIncomingMessage(entry = entry, modifier = lineModifier)
+            val longPressModifier = Modifier.combinedClickable(
+                indication        = null,
+                interactionSource = remember { MutableInteractionSource() },
+                onClick           = {},
+                onLongClick       = { onLongPress(entry) },
+            )
+
+            Column {
+                if (entry.message.isOutgoing) {
+                    PersonaOutgoingMessage(entry = entry, modifier = lineModifier.then(longPressModifier))
+                } else {
+                    PersonaIncomingMessage(entry = entry, modifier = lineModifier.then(longPressModifier))
+                }
+
+                // Reactions row
+                val msgReactions = reactions[entry.message.id]
+                if (!msgReactions.isNullOrEmpty()) {
+                    ReactionRow(
+                        reactions  = msgReactions,
+                        isOutgoing = entry.message.isOutgoing,
+                    )
+                }
             }
         }
+    }
+}
+
+// ── Reaction row ──────────────────────────────────────────────────────────────
+
+@Composable
+private fun ReactionRow(
+    reactions:  Map<String, Int>,
+    isOutgoing: Boolean,
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(
+                start = if (isOutgoing) 0.dp else 16.dp,
+                end   = if (isOutgoing) 16.dp else 0.dp,
+                bottom = 2.dp,
+            ),
+        // Align right for outgoing, left for incoming
+    ) {
+        if (isOutgoing) Spacer(Modifier.weight(1f))
+
+        reactions.forEach { (emoji, count) ->
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .background(Color.Black.copy(alpha = 0.7f))
+                    .padding(horizontal = 6.dp, vertical = 3.dp),
+            ) {
+                Row(
+                    verticalAlignment      = Alignment.CenterVertically,
+                    horizontalArrangement  = Arrangement.spacedBy(3.dp),
+                ) {
+                    Text(emoji, fontSize = 14.sp)
+                    if (count > 1) {
+                        Text(
+                            text       = count.toString(),
+                            fontFamily = PersonaFont,
+                            fontSize   = 12.sp,
+                            color      = Color.White,
+                        )
+                    }
+                }
+            }
+        }
+
+        if (!isOutgoing) Spacer(Modifier.weight(1f))
     }
 }
