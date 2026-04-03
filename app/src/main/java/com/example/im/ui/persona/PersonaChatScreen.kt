@@ -7,6 +7,7 @@ import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.add
@@ -44,25 +45,29 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.time.LocalDate
 
 @Composable
 fun PersonaChatScreen(
-    state: PersonaChatState = rememberPersonaChatState(),
+    state:  PersonaChatState = rememberPersonaChatState(),
+    onBack: () -> Unit       = {},
+    date:   LocalDate        = LocalDate.now(),
 ) {
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxSize()
             .background(PersonaRed)
             .imePadding(),
     ) {
+        PersonaTopBar(onBack = onBack, date = date)
+
         PersonaTranscript(
             entries  = state.entries,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.weight(1f),
         )
 
         PersonaInputBar(
-            onSend   = { state.sendMessage(it) },
-            modifier = Modifier.align(Alignment.BottomCenter),
+            onSend = { state.sendMessage(it) },
         )
     }
 }
@@ -71,8 +76,7 @@ fun PersonaChatScreen(
 
 @Composable
 private fun PersonaInputBar(
-    onSend:   (String) -> Unit,
-    modifier: Modifier = Modifier,
+    onSend: (String) -> Unit,
 ) {
     var text by remember { mutableStateOf("") }
 
@@ -86,7 +90,7 @@ private fun PersonaInputBar(
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
             .background(Color.White)
             .padding(
