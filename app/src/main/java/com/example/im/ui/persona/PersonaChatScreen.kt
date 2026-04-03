@@ -16,9 +16,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
@@ -394,19 +394,29 @@ fun PersonaTranscript(
                 onLongClick       = { onLongPress(entry) },
             )
 
-            Column {
+            // Box so reaction badge overlaps the bubble — no extra space
+            Box {
                 if (entry.message.isOutgoing) {
                     PersonaOutgoingMessage(entry = entry, modifier = lineModifier.then(longPressModifier))
                 } else {
                     PersonaIncomingMessage(entry = entry, modifier = lineModifier.then(longPressModifier))
                 }
 
-                // Reactions row
                 val msgReactions = reactions[entry.message.id]
                 if (!msgReactions.isNullOrEmpty()) {
-                    ReactionRow(
+                    ReactionBadge(
                         reactions  = msgReactions,
-                        isOutgoing = entry.message.isOutgoing,
+                        // Incoming tip is on the left → reaction at bottom-right (towards center)
+                        // Outgoing tip is on the right → reaction at bottom-left (towards center)
+                        modifier   = Modifier
+                            .align(
+                                if (entry.message.isOutgoing) Alignment.BottomStart
+                                else Alignment.BottomEnd
+                            )
+                            .offset(
+                                x = if (entry.message.isOutgoing) 48.dp else (-48).dp,
+                                y = (-6).dp,
+                            ),
                     )
                 }
             }
@@ -414,50 +424,53 @@ fun PersonaTranscript(
     }
 }
 
-// ── Reaction row ──────────────────────────────────────────────────────────────
+// ── Reaction badge ────────────────────────────────────────────────────────────
 
 @Composable
-private fun ReactionRow(
-    reactions:  Map<String, Int>,
-    isOutgoing: Boolean,
+private fun ReactionBadge(
+    reactions: Map<String, Int>,
+    modifier:  Modifier = Modifier,
 ) {
+    val density = LocalDensity.current
+
+    // P5-styled skewed pill
+    val shape = GenericShape { size, _ ->
+        val r = with(density) { 4.dp.toPx() }
+        val skew = with(density) { 3.dp.toPx() }
+        moveTo(r + skew, 0f)
+        lineTo(size.width - r, 0f)
+        lineTo(size.width, r)
+        lineTo(size.width - skew, size.height - r)
+        lineTo(size.width - skew - r, size.height)
+        lineTo(r, size.height)
+        lineTo(0f, size.height - r)
+        lineTo(skew, r)
+        close()
+    }
+
     Row(
         horizontalArrangement = Arrangement.spacedBy(4.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(
-                start = if (isOutgoing) 0.dp else 16.dp,
-                end   = if (isOutgoing) 16.dp else 0.dp,
-                bottom = 2.dp,
-            ),
-        // Align right for outgoing, left for incoming
+        modifier = modifier,
     ) {
-        if (isOutgoing) Spacer(Modifier.weight(1f))
-
         reactions.forEach { (emoji, count) ->
-            Box(
-                contentAlignment = Alignment.Center,
+            Row(
+                verticalAlignment     = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
                 modifier = Modifier
-                    .background(Color.Black.copy(alpha = 0.7f))
-                    .padding(horizontal = 6.dp, vertical = 3.dp),
+                    .clip(shape)
+                    .background(Color(0xFF1A1A1A))
+                    .padding(horizontal = 7.dp, vertical = 3.dp),
             ) {
-                Row(
-                    verticalAlignment      = Alignment.CenterVertically,
-                    horizontalArrangement  = Arrangement.spacedBy(3.dp),
-                ) {
-                    Text(emoji, fontSize = 14.sp)
-                    if (count > 1) {
-                        Text(
-                            text       = count.toString(),
-                            fontFamily = PersonaFont,
-                            fontSize   = 12.sp,
-                            color      = Color.White,
-                        )
-                    }
+                Text(emoji, fontSize = 13.sp)
+                if (count > 1) {
+                    Text(
+                        text       = count.toString(),
+                        fontFamily = PersonaFont,
+                        fontSize   = 11.sp,
+                        color      = Color.White,
+                    )
                 }
             }
         }
-
-        if (!isOutgoing) Spacer(Modifier.weight(1f))
     }
 }
