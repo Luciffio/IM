@@ -1,6 +1,7 @@
 package com.example.im.ui.persona
 
 import androidx.compose.ui.graphics.Color
+import java.time.LocalDate
 
 // ---------------------------------------------------------------------------
 // Telegram-like data model stubs
@@ -35,6 +36,29 @@ val SampleParticipants: Map<Long, ChatParticipant> = mapOf(
     1L to ChatParticipant(1L, "Ann",    P5ColorAnn),
     2L to ChatParticipant(2L, "Ryuji",  P5ColorRyuji),
     3L to ChatParticipant(3L, "Yusuke", P5ColorYusuke),
+)
+
+// ---------------------------------------------------------------------------
+// Chat list model
+// ---------------------------------------------------------------------------
+
+data class ChatPreview(
+    val id:           Long,
+    val name:         String,
+    val lastMessage:  String,
+    val date:         LocalDate,
+    val hasUnread:    Boolean = false,
+    val color:        Color   = Color(0xFFFE93C9),
+)
+
+val SampleChatList = listOf(
+    ChatPreview(1L, "Ann",    "Hello, Senpai",               LocalDate.of(2026, 3, 3),  hasUnread = false, color = P5ColorAnn),
+    ChatPreview(2L, "Ryuji",  "After school tomorrow",       LocalDate.of(2026, 3, 2),  hasUnread = true,  color = P5ColorRyuji),
+    ChatPreview(3L, "Yusuke", "I'm glad you made it back…",  LocalDate.of(2026, 2, 13), hasUnread = false, color = P5ColorYusuke),
+    ChatPreview(4L, "Ann",    "Tomorrow's finally the day",  LocalDate.of(2026, 2, 2),  hasUnread = false, color = P5ColorAnn),
+    ChatPreview(5L, "Ryuji",  "If he's comin', it'll be today", LocalDate.of(2026, 2, 2), hasUnread = false, color = P5ColorRyuji),
+    ChatPreview(6L, "Yusuke", "It's already February!",      LocalDate.of(2026, 2, 1),  hasUnread = false, color = P5ColorYusuke),
+    ChatPreview(7L, "Ann",    "Don't forget to study!",      LocalDate.of(2026, 1, 28), hasUnread = false, color = P5ColorAnn),
 )
 
 val SampleMessages = listOf(
