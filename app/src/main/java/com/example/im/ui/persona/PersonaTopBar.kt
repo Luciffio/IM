@@ -199,5 +199,5 @@ private fun BackArrow(onClick: () -> Unit, modifier: Modifier = Modifier) {
                     drawPath(arrowPath, Color.White)
                 }
             }
-    )
+    ) {}
 }
