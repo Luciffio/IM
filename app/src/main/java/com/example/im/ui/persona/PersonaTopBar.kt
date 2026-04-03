@@ -56,7 +56,7 @@ fun PersonaTopBar(
                 .height(3.dp)
                 .align(Alignment.Center)
                 .drawBehind { drawRect(Color.Black) }
-        )
+        ) {}
 
         // ── Date badge (centered) ────────────────────────────────────────────
         DateBadge(
