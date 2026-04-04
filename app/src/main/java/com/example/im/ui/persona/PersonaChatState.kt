@@ -170,6 +170,16 @@ class PersonaChatState internal constructor(
             PersonaSizes.MaxLineWidth.toPx(),
         )
 
+        // Apply the horizontal shift HERE at creation time so that lineCoordinates
+        // never change after the entry is first rendered.  Previously the shift was
+        // applied in finalizeEntryState (when the *next* message arrived), which
+        // caused the already-fully-drawn N-2→N-1 line to jump because its bottom
+        // endpoint (= entry N-1's lineCoordinates) suddenly changed.
+        val direction      = if (index % 2 == 0) 1f else -1f
+        val horizontalShift = if (index > 0) {
+            randomBetween(PersonaSizes.MinLineShift.toPx(), PersonaSizes.MaxLineShift.toPx()) * direction
+        } else 0f
+
         val lineCoordinates = if (msg.isOutgoing) {
             val cx = PersonaSizes.OutgoingCenterX.toPx()
             val cy = PersonaSizes.OutgoingCenterY.toPx()
@@ -181,8 +191,8 @@ class PersonaChatState internal constructor(
             val avatarCenterX = PersonaSizes.AvatarSize.width.toPx() / 2f
             val avatarCenterY = PersonaSizes.AvatarSize.height.toPx() / 2f
             LineCoordinates(
-                leftPoint  = Offset(avatarCenterX - width / 2f, avatarCenterY),
-                rightPoint = Offset(avatarCenterX + width / 2f, avatarCenterY),
+                leftPoint  = Offset(avatarCenterX - width / 2f + horizontalShift, avatarCenterY),
+                rightPoint = Offset(avatarCenterX + width / 2f + horizontalShift, avatarCenterY),
             )
         }
 
@@ -233,20 +243,9 @@ class PersonaChatState internal constructor(
     }
 
     /** Triggers the connecting-line grow animation on the previous entry. */
-    private fun finalizeEntryState(state: EntryState) = with(density) {
-        val direction       = if (state.position % 2 == 0) 1f else -1f
-        val horizontalShift = if (state.position > 0) {
-            randomBetween(PersonaSizes.MinLineShift.toPx(), PersonaSizes.MaxLineShift.toPx()) * direction
-        } else 0f
-
-        val offset = if (state.message.isOutgoing) Offset.Zero
-        else Offset(horizontalShift, 0f)
-
-        state.lineCoordinates = state.lineCoordinates.copy(
-            leftPoint  = state.lineCoordinates.leftPoint  + offset,
-            rightPoint = state.lineCoordinates.rightPoint + offset,
-        )
-
+    private fun finalizeEntryState(state: EntryState) {
+        // lineCoordinates are already in their final position (shift was applied at
+        // createEntryState time), so we only need to start the grow animation here.
         coroutineScope.launch {
             state.lineProgress.animateTo(1f, tween(180))
         }
