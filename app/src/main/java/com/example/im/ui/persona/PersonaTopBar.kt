@@ -134,6 +134,9 @@ private fun TopBarAvatar(
     Box(
         modifier = modifier
             .size(width = 58.dp, height = 47.dp)
+            // clip() BEFORE drawBehind so the layer clip applies to all drawing,
+            // including the drawBehind pass — eliminates stray anti-alias pixels.
+            .clip(with(density) { avatarScaledClipBox() })
             .drawBehind {
                 drawOutline(
                     with(density) { avatarScaledBlackBox() }
@@ -150,8 +153,7 @@ private fun TopBarAvatar(
                         .createOutline(size, layoutDirection, this),
                     color,
                 )
-            }
-            .clip(with(density) { avatarScaledClipBox() }),
+            },
     ) {
         // Portrait initial — top-end, same anchor as PersonaAvatar portrait image
         Text(

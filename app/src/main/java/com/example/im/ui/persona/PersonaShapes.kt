@@ -20,8 +20,8 @@ object PersonaSizes {
     val OutgoingCenterX = 60.dp
     val OutgoingCenterY = 28.dp
     // Random width range for the connecting line.
-    val MinLineWidth    = 44.dp
-    val MaxLineWidth    = 60.dp
+    val MinLineWidth    = 33.dp
+    val MaxLineWidth    = 45.dp
     // Random horizontal jitter applied to each line segment endpoint.
     val MinLineShift    = 16.dp
     val MaxLineShift    = 48.dp

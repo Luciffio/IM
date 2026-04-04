@@ -25,14 +25,10 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material3.Icon
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -50,10 +46,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
@@ -215,54 +213,27 @@ private fun PersonaInputBar(
 
 // ── Attach button (📎 paperclip) ──────────────────────────────────────────────
 //
-// Standard smooth paperclip: outer oval + inner 270° arc, tilted -35°.
-// Intentional style exception — the only curved icon in the P5 UI.
+// Standard Telegram-style AttachFile icon — no custom styling.
 
 @Composable
 private fun AttachButton(onClick: () -> Unit) {
-    val density = LocalDensity.current
-
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
             .size(40.dp)
-            .drawWithCache {
-                val sw = with(density) { 2.0.dp.toPx() }
-                val cx = size.width  / 2f
-                val cy = size.height / 2f
-                val ow = size.width  * 0.27f   // outer oval half-width
-                val oh = size.height * 0.40f   // outer oval half-height
-
-                onDrawBehind {
-                    rotate(-35f, pivot = androidx.compose.ui.geometry.Offset(cx, cy)) {
-                        // Outer full oval
-                        drawOval(
-                            color   = Color.White,
-                            topLeft = androidx.compose.ui.geometry.Offset(cx - ow, cy - oh),
-                            size    = Size(ow * 2f, oh * 2f),
-                            style   = Stroke(width = sw),
-                        )
-                        // Inner 270° arc — open at the bottom, creating the clip gap
-                        val iw = ow - sw * 2.2f
-                        val ih = oh * 0.50f
-                        drawArc(
-                            color      = Color.White,
-                            startAngle = 90f,
-                            sweepAngle = 270f,
-                            useCenter  = false,
-                            topLeft    = androidx.compose.ui.geometry.Offset(cx - iw, cy - oh + sw * 1.5f),
-                            size       = Size(iw * 2f, ih * 2f),
-                            style      = Stroke(width = sw, cap = StrokeCap.Round),
-                        )
-                    }
-                }
-            }
             .clickable(
                 indication        = null,
                 interactionSource = remember { MutableInteractionSource() },
                 onClick           = onClick,
             ),
-    ) {}
+    ) {
+        Icon(
+            imageVector        = Icons.Default.AttachFile,
+            contentDescription = "Attach file",
+            tint               = Color.White,
+            modifier           = Modifier.size(24.dp),
+        )
+    }
 }
 
 // ── Emoji toggle button ───────────────────────────────────────────────────────
@@ -317,41 +288,53 @@ private fun EmojiButton(active: Boolean, onClick: () -> Unit) {
     ) {}
 }
 
-// ── Send button ───────────────────────────────────────────────────────────────
+// ── Send button — P5 octagon style (ref: Persona action buttons) ──────────────
+//
+// Layer 1 (back) : white filled octagon  (flat edges at top/bottom/left/right)
+// Layer 2        : black filled circle   (~73 % of octagon radius)
+// Layer 3 (front): white equilateral triangle pointing RIGHT (~54 % of circle)
+//
+// Disabled state: all white → dim-gray.
 
 @Composable
 private fun SendButton(enabled: Boolean, onClick: () -> Unit) {
-    val density    = LocalDensity.current
-    // On black bar: white outer frame + black inner fill; text = white (= bgColor)
-    val bgColor    = if (enabled) Color.White else Color(0xFF666666)
-    val innerColor = if (enabled) Color.Black else Color(0xFF444444)
-
-    val shape = GenericShape { size, _ ->
-        val skew = with(density) { 6.dp.toPx() }
-        moveTo(skew, 0f)
-        lineTo(size.width, 0f)
-        lineTo(size.width - skew, size.height)
-        lineTo(0f, size.height)
-        close()
-    }
+    val fgColor = if (enabled) Color.White else Color(0xFF555555)
 
     Box(
-        contentAlignment = Alignment.Center,
         modifier = Modifier
-            .clip(shape)
-            .drawBehind {
-                val outerOutline = shape.createOutline(size, layoutDirection, this)
-                drawOutline(outerOutline, bgColor)
-                val innerShape = GenericShape { s, _ ->
-                    val skew = with(density) { 6.dp.toPx() }
-                    val pad  = with(density) { 2.dp.toPx() }
-                    moveTo(skew + pad, pad)
-                    lineTo(s.width - pad, pad)
-                    lineTo(s.width - skew - pad, s.height - pad)
-                    lineTo(pad, s.height - pad)
+            .size(40.dp)
+            .drawWithCache {
+                val cx      = size.width  / 2f
+                val cy      = size.height / 2f
+                val outerR  = size.width  * 0.45f     // octagon circumradius
+                val circleR = outerR * 0.855f          // black circle radius (~45% thinner ring)
+                val triR    = circleR * 0.54f          // triangle circumradius
+
+                // Stop-sign octagon: vertices at 22.5° + k·45° (screen coords, y-down)
+                val octPath = Path().apply {
+                    for (i in 0 until 8) {
+                        val a = Math.toRadians(22.5 + i * 45.0)
+                        val x = cx + outerR * Math.cos(a).toFloat()
+                        val y = cy + outerR * Math.sin(a).toFloat()
+                        if (i == 0) moveTo(x, y) else lineTo(x, y)
+                    }
                     close()
                 }
-                drawOutline(innerShape.createOutline(size, layoutDirection, this), innerColor)
+
+                // Right-pointing equilateral triangle
+                // Vertices at 0°, 120°, 240° clockwise from the right
+                val triPath = Path().apply {
+                    moveTo(cx + triR,         cy)
+                    lineTo(cx - triR * 0.5f,  cy + triR * 0.866f)
+                    lineTo(cx - triR * 0.5f,  cy - triR * 0.866f)
+                    close()
+                }
+
+                onDrawBehind {
+                    drawPath(octPath, fgColor)          // 1. octagon
+                    drawCircle(Color.Black, circleR)    // 2. circle
+                    drawPath(triPath, fgColor)          // 3. triangle
+                }
             }
             .then(
                 if (enabled) Modifier.clickable(
@@ -359,16 +342,8 @@ private fun SendButton(enabled: Boolean, onClick: () -> Unit) {
                     interactionSource = remember { MutableInteractionSource() },
                     onClick           = onClick,
                 ) else Modifier
-            )
-            .padding(horizontal = 18.dp, vertical = 10.dp),
-    ) {
-        Text(
-            text       = "Send",
-            fontFamily = PersonaFont,
-            fontSize   = 14.sp,
-            color      = bgColor,
-        )
-    }
+            ),
+    )
 }
 
 // ── Transcript ────────────────────────────────────────────────────────────────
