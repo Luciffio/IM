@@ -4,6 +4,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,14 +15,13 @@ import androidx.compose.foundation.layout.add
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -47,11 +47,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
@@ -72,6 +77,7 @@ fun PersonaChatScreen(
     var showEmojiPanel  by remember { mutableStateOf(false) }
     var inputText       by remember { mutableStateOf("") }
     var selectedEntry   by remember { mutableStateOf<PersonaEntry?>(null) }
+    var menuAnchor      by remember { mutableStateOf(Offset.Zero) }
     // messageId -> (emoji -> count)
     val reactions = remember { mutableStateMapOf<Long, MutableMap<String, Int>>() }
     val keyboard = LocalSoftwareKeyboardController.current
@@ -87,8 +93,9 @@ fun PersonaChatScreen(
             PersonaTranscript(
                 entries   = state.entries,
                 reactions = reactions,
-                onLongPress = { entry ->
+                onLongPress = { entry, offset ->
                     selectedEntry  = entry
+                    menuAnchor     = offset
                     showEmojiPanel = false
                     keyboard?.hide()
                 },
@@ -129,18 +136,47 @@ fun PersonaChatScreen(
         )
 
         // ── Context menu overlay ─────────────────────────────────────────────
+        // ── Debug FAB — inject a test incoming message ───────────────────────
+        DebugIncomingButton(
+            onClick  = { state.sendTestIncoming() },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 16.dp, bottom = 110.dp),
+        )
+
         selectedEntry?.let { entry ->
             PersonaMessageMenu(
-                entry        = entry,
-                onDismiss    = { selectedEntry = null },
-                onReact      = { emoji ->
+                entry         = entry,
+                anchorOffset  = menuAnchor,
+                isOutgoing    = entry.message.isOutgoing,
+                onDismiss     = { selectedEntry = null },
+                onReact       = { emoji ->
                     val map = reactions.getOrPut(entry.message.id) { mutableMapOf() }
                     map[emoji] = (map[emoji] ?: 0) + 1
                 },
-                onAction     = { /* TODO: implement actions */ },
+                onAction      = { /* TODO: implement actions */ },
                 onExpandEmoji = { showEmojiPanel = true },
             )
         }
+    }
+}
+
+// ── Debug FAB ────────────────────────────────────────────────────────────────
+
+@Composable
+private fun DebugIncomingButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = modifier
+            .size(44.dp)
+            .background(Color.Yellow, CircleShape)
+            .clickable(
+                indication        = null,
+                interactionSource = remember { MutableInteractionSource() },
+                onClick           = onClick,
+            ),
+    ) {
+        Text("👤", fontSize = 18.sp)
     }
 }
 
@@ -184,6 +220,7 @@ private fun PersonaInputBar(
                     contentAlignment = Alignment.CenterStart,
                     modifier = Modifier
                         .fillMaxWidth()
+                        .height(44.dp)                    // fixed height — prevents 1-2px jitter on first keystroke
                         .background(Color(0xFF1A1A1A))
                         .padding(horizontal = 14.dp, vertical = 10.dp),
                 ) {
@@ -352,12 +389,11 @@ private fun SendButton(enabled: Boolean, onClick: () -> Unit) {
 
 // ── Transcript ────────────────────────────────────────────────────────────────
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun PersonaTranscript(
     entries:     List<PersonaEntry>,
-    reactions:   Map<Long, Map<String, Int>> = emptyMap(),
-    onLongPress: (PersonaEntry) -> Unit      = {},
+    reactions:   Map<Long, Map<String, Int>>    = emptyMap(),
+    onLongPress: (PersonaEntry, Offset) -> Unit = { _, _ -> },
     modifier:    Modifier = Modifier,
 ) {
     val listState      = rememberLazyListState()
@@ -391,15 +427,26 @@ fun PersonaTranscript(
                 entry1 = entry,
                 entry2 = entries.getOrNull(index + 1),
             )
-            val longPressModifier = Modifier.combinedClickable(
-                indication        = null,
-                interactionSource = remember { MutableInteractionSource() },
-                onClick           = {},
-                onLongClick       = { onLongPress(entry) },
-            )
 
-            // Box so reaction badge overlaps the bubble — no extra space
-            Box {
+            // Track root position of this item so we can compute an absolute
+            // screen coordinate when a long-press fires inside the bubble.
+            var itemRootPos by remember { mutableStateOf(Offset.Zero) }
+
+            val longPressModifier = Modifier.pointerInput(entry) {
+                detectTapGestures(
+                    onLongPress = { localOffset ->
+                        onLongPress(entry, itemRootPos + localOffset)
+                    },
+                )
+            }
+
+            // Box so reaction badge overlaps the bubble — no extra space.
+            // onGloballyPositioned gives us the root-level screen coords of the item.
+            Box(
+                modifier = Modifier.onGloballyPositioned { coords ->
+                    itemRootPos = coords.positionInRoot()
+                },
+            ) {
                 if (entry.message.isOutgoing) {
                     PersonaOutgoingMessage(entry = entry, modifier = lineModifier.then(longPressModifier))
                 } else {
@@ -410,7 +457,6 @@ fun PersonaTranscript(
                 if (!msgReactions.isNullOrEmpty()) {
                     ReactionBadge(
                         reactions = msgReactions,
-                        // Sticker overlaps the bubble's bottom edge by 6 dp.
                         modifier  = Modifier
                             .align(Alignment.BottomEnd)
                             .offset(x = (-6).dp, y = (-6).dp),

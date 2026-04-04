@@ -1,6 +1,7 @@
 package com.example.im.ui.persona
 
 import androidx.compose.foundation.shape.GenericShape
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.DpSize
@@ -251,4 +252,90 @@ internal fun Density.reactionBadgeShape(): Shape = GenericShape { size, _ ->
     lineTo(size.width - skew, size.height)
     lineTo(0f, size.height)
     close()
+}
+
+// ── Phantom context-menu path ────────────────────────────────────────────────
+//
+// Single continuous Path used for both the white fill and the 3 dp black border.
+// Caller must use drawBehind { drawPath(fill) + drawPath(stroke) } — NOT clip().
+//
+// Tail geometry mirrors P5 speech-bubble style (photo reference):
+//   - Asymmetric base: right edge is 4 dp wider than left
+//   - Two angular "steps" on the right flank → jagged P5 spike look
+//   - Left side slopes cleanly to the tip
+//   - tailAtTop = false → tail protrudes from card BOTTOM (menu above message)
+//   - tailAtTop = true  → tail protrudes from card TOP   (menu below message)
+//
+// The composable height must include MENU_TAIL_H_DP extra dp for the tail space.
+// Content Column must add matching top/bottom padding to avoid the tail area.
+
+/** Tail extension depth (dp) from the card body edge to the tip. */
+const val MENU_TAIL_H_DP = 30f
+
+/** Horizontal center of the tail within the card (dp from left edge). */
+const val MENU_TAIL_CENTER_X_DP = 40f
+
+/**
+ * Builds the complete menu card + tail as a single closed Path.
+ *
+ * @param width           composable width in px
+ * @param height          composable height in px (includes tail space)
+ * @param tailAtTop       true → tail at top edge; false → tail at bottom edge
+ * @param tailCenterXPx   horizontal centre of the tail in px; default = [MENU_TAIL_CENTER_X_DP]
+ */
+internal fun Density.buildPhantomMenuPath(
+    width: Float,
+    height: Float,
+    tailAtTop: Boolean,
+    tailCenterXPx: Float = MENU_TAIL_CENTER_X_DP.dp.toPx(),
+): Path {
+    val tailH  = MENU_TAIL_H_DP.dp.toPx()
+    val cx     = tailCenterXPx.coerceIn(20.dp.toPx(), width - 20.dp.toPx())
+    val cut    = 10.dp.toPx()   // diagonal corner notch
+    val lean   = 10.dp.toPx()   // bottom-right lean for P5 asymmetry
+
+    // Tail base: left = cx−12 dp, right = cx+16 dp (intentionally asymmetric)
+    val bL = cx - 12.dp.toPx()   // left base x
+    val bR = cx + 16.dp.toPx()   // right base x  ← wider
+
+    // Angular step offsets on the right flank (creates the jagged look)
+    val rS1x = 8.dp.toPx()       // x retraction at step 1
+    val rS1y = 9.dp.toPx()       // y descent at step 1
+    val rS2x = 4.dp.toPx()       // x retraction at step 2
+    val rS2y = 11.dp.toPx()      // y descent at step 2
+
+    return Path().apply {
+        if (!tailAtTop) {
+            // ── Card with BOTTOM tail ─────────────────────────────────────────
+            val bodyBot = height - tailH
+
+            moveTo(cut, 0f)                                    // TL (corner cut)
+            lineTo(width, 0f)                                  // top edge
+            lineTo(width - lean, bodyBot)                      // right side (lean)
+            lineTo(bR + 4.dp.toPx(), bodyBot)                 // bottom edge right of tail
+            lineTo(bR - rS1x, bodyBot + rS1y)                 // right step 1
+            lineTo(bR - rS1x - rS2x, bodyBot + rS1y + rS2y)  // right step 2
+            lineTo(cx, height)                                 // TIP ← sharpest point
+            lineTo(bL + 2.dp.toPx(), bodyBot + 10.dp.toPx()) // left approach
+            lineTo(bL, bodyBot)                                // left of tail base
+            lineTo(0f, bodyBot)                                // BL
+            lineTo(0f, cut)                                    // left edge
+            close()                                            // diagonal → TL
+        } else {
+            // ── Card with TOP tail ────────────────────────────────────────────
+            val bodyTop = tailH
+
+            moveTo(0f, bodyTop)                                // TL of body
+            lineTo(bL, bodyTop)                                // top edge left of tail
+            lineTo(bL + 2.dp.toPx(), bodyTop - 10.dp.toPx()) // left approach upward
+            lineTo(cx, 0f)                                     // TIP ← sharpest point
+            lineTo(bR - rS1x - rS2x, bodyTop - rS1y - rS2y) // right step 2
+            lineTo(bR - rS1x, bodyTop - rS1y)                 // right step 1
+            lineTo(bR + 4.dp.toPx(), bodyTop)                 // top edge right of tail
+            lineTo(width, bodyTop)                             // TR
+            lineTo(width - lean, height)                       // BR (lean matches bottom-tail variant)
+            lineTo(0f, height)                                 // BL
+            close()                                            // back to TL
+        }
+    }
 }

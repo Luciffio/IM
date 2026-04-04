@@ -150,6 +150,20 @@ class PersonaChatState internal constructor(
         while (cursor < allMessages.size) advance()
     }
 
+    /** Inject a test incoming message from a random participant (debug only). */
+    fun sendTestIncoming() {
+        val participant = participants.values.randomOrNull() ?: return
+        val msg = TelegramMessage(
+            id         = nextId++,
+            text       = "Test message ${nextId} 👋",
+            senderId   = participant.id,
+            senderName = participant.name,
+            timestamp  = System.currentTimeMillis(),
+            isOutgoing = false,
+        )
+        appendMessage(msg)
+    }
+
     private fun createEntryState(index: Int, msg: TelegramMessage): EntryState = with(density) {
         val width = randomBetween(
             PersonaSizes.MinLineWidth.toPx(),
