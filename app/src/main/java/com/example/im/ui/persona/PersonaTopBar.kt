@@ -1,5 +1,6 @@
 package com.example.im.ui.persona
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -23,7 +25,6 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -34,11 +35,14 @@ import java.time.format.DateTimeFormatter
 /**
  * Full-screen-width P5 TopBar for the chat.
  *
- * Visual structure (back-to-front):
- *   • Black trapezoid background drawn via [topBarShape] — overlaps status bar.
+ * Rendered as an OVERLAY (placed in a Box above content in PersonaChatScreen),
+ * so chat content scrolls cleanly beneath the diagonal bottom edge.
+ *
+ * Visual structure:
+ *   • Black trapezoid — clips the whole composable via [topBarShape].
  *   • [BackArrow]  — left edge.
  *   • [contactName] in white bold caps + small date line.
- *   • [TopBarAvatar] — parallelogram card with 1-dp white border — right edge.
+ *   • [TopBarAvatar] — white-bordered parallelogram placeholder — right edge.
  */
 @Composable
 fun PersonaTopBar(
@@ -50,17 +54,16 @@ fun PersonaTopBar(
 ) {
     val density = LocalDensity.current
 
-    // Outer Box: no fixed height — grows with statusBar + 64 dp content.
-    // drawBehind runs BEFORE the inner content, so the trapezoid covers the full
-    // height including the system status bar area.
+    // clip() to trapezoid + background(Black):
+    //   • The composable is visually clipped to the trapezoid shape.
+    //   • The transparent "cut" corner exposes chat content below — correct P5 look.
+    //   • Works correctly as an overlay: content scrolls under the black area,
+    //     not into it.
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .drawBehind {
-                val outline = with(density) { topBarShape() }
-                    .createOutline(size, layoutDirection, this)
-                drawOutline(outline, Color.Black)
-            },
+            .clip(with(density) { topBarShape() })
+            .background(Color.Black),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -70,12 +73,9 @@ fun PersonaTopBar(
                 .height(64.dp)
                 .padding(horizontal = 8.dp),
         ) {
-            // ── Back arrow ───────────────────────────────────────────────────
             BackArrow(onClick = onBack)
-
             Spacer(Modifier.width(8.dp))
 
-            // ── Contact name + date ──────────────────────────────────────────
             Column(
                 verticalArrangement = Arrangement.Center,
                 modifier = Modifier.weight(1f),
@@ -92,10 +92,9 @@ fun PersonaTopBar(
                 TopBarDateLine(date = date)
             }
 
-            // ── Avatar ───────────────────────────────────────────────────────
             TopBarAvatar(
-                initial = contactInitial.uppercase(),
-                color   = contactColor,
+                initial  = contactInitial.uppercase(),
+                color    = contactColor,
                 modifier = Modifier.padding(end = 8.dp, top = 6.dp, bottom = 10.dp),
             )
         }
@@ -120,8 +119,10 @@ private fun TopBarDateLine(date: LocalDate) {
 }
 
 // ── TopBar avatar ─────────────────────────────────────────────────────────────
-// Exact same visual as PersonaAvatar (black→white→colored layers) using the
-// proportional shapes from PersonaShapes.kt — scales to any size.
+//
+// Simple parallelogram: white outer path + colored inner path drawn in drawBehind.
+// Two filled polygons — no layering, no antialiasing conflicts, no dot artifacts.
+// The skew ratio (0.20 × height) matches topBarAvatarShape() from PersonaShapes.kt.
 
 @Composable
 private fun TopBarAvatar(
@@ -129,33 +130,48 @@ private fun TopBarAvatar(
     color:    Color,
     modifier: Modifier = Modifier,
 ) {
-    val density = LocalDensity.current
+    // GenericShape built from size ratios — no Density needed.
+    val clipShape = remember {
+        GenericShape { size, _ ->
+            val skew = size.height * 0.20f
+            moveTo(skew, 0f)
+            lineTo(size.width, 0f)
+            lineTo(size.width - skew, size.height)
+            lineTo(0f, size.height)
+            close()
+        }
+    }
 
     Box(
         modifier = modifier
-            .size(width = 58.dp, height = 47.dp)
-            // clip() BEFORE drawBehind so the layer clip applies to all drawing,
-            // including the drawBehind pass — eliminates stray anti-alias pixels.
-            .clip(with(density) { avatarScaledClipBox() })
+            .size(width = 52.dp, height = 42.dp)
             .drawBehind {
-                drawOutline(
-                    with(density) { avatarScaledBlackBox() }
-                        .createOutline(size, layoutDirection, this),
-                    Color.Black,
-                )
-                drawOutline(
-                    with(density) { avatarScaledWhiteBox() }
-                        .createOutline(size, layoutDirection, this),
-                    Color.White,
-                )
-                drawOutline(
-                    with(density) { avatarScaledColoredBox() }
-                        .createOutline(size, layoutDirection, this),
-                    color,
-                )
-            },
+                // 2.5 dp border width — uses DrawScope's own Density, no LocalDensity needed.
+                val bw   = 2.5.dp.toPx()
+                val skew = size.height * 0.20f
+
+                // Outer parallelogram — white (border)
+                val outerPath = Path().apply {
+                    moveTo(skew, 0f)
+                    lineTo(size.width, 0f)
+                    lineTo(size.width - skew, size.height)
+                    lineTo(0f, size.height)
+                    close()
+                }
+                // Inner parallelogram — contact color (inset by bw on all sides)
+                val innerPath = Path().apply {
+                    moveTo(skew + bw, bw)
+                    lineTo(size.width - bw, bw)
+                    lineTo(size.width - skew - bw, size.height - bw)
+                    lineTo(bw, size.height - bw)
+                    close()
+                }
+
+                drawPath(outerPath, Color.White)
+                drawPath(innerPath, color)
+            }
+            .clip(clipShape),
     ) {
-        // Portrait initial — top-end, same anchor as PersonaAvatar portrait image
         Text(
             text       = initial,
             fontFamily = PersonaFont,

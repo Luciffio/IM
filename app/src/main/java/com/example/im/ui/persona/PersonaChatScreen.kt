@@ -77,20 +77,13 @@ fun PersonaChatScreen(
     val keyboard = LocalSoftwareKeyboardController.current
 
     Box(modifier = Modifier.fillMaxSize()) {
+        // ── Content column (no TopBar here — it's an overlay below) ─────────
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .background(PersonaRed)
                 .imePadding(),
         ) {
-            PersonaTopBar(
-                onBack         = onBack,
-                date           = date,
-                contactName    = contactName,
-                contactColor   = contactColor,
-                contactInitial = contactInitial,
-            )
-
             PersonaTranscript(
                 entries   = state.entries,
                 reactions = reactions,
@@ -124,7 +117,18 @@ fun PersonaChatScreen(
             )
         }
 
-        // Context menu overlay
+        // ── TopBar overlay — clips to trapezoid, draws on top of content ────
+        // Content scrolls under the black area; the diagonal "cut" corner
+        // correctly reveals the red chat background below it.
+        PersonaTopBar(
+            onBack         = onBack,
+            date           = date,
+            contactName    = contactName,
+            contactColor   = contactColor,
+            contactInitial = contactInitial,
+        )
+
+        // ── Context menu overlay ─────────────────────────────────────────────
         selectedEntry?.let { entry ->
             PersonaMessageMenu(
                 entry        = entry,
