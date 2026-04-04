@@ -3,6 +3,9 @@ package com.example.im.ui.persona
 import androidx.compose.ui.graphics.Color
 import java.time.LocalDate
 
+// Base timestamp: 2026-04-03 10:00:00 UTC (epoch millis)
+private const val BASE_TS = 1743674400000L
+
 // ---------------------------------------------------------------------------
 // Telegram-like data model stubs
 // ---------------------------------------------------------------------------
@@ -17,15 +20,36 @@ data class ChatParticipant(
     val avatarRes: Int? = null,
 )
 
-/** Single chat message — maps 1-to-1 with Telegram's Message model. */
+/**
+ * Telegram message — UI-layer model.
+ *
+ * This is the *display* model used by Compose components; it is intentionally
+ * separate from [TgMessage] (the full Telegram API model in TelegramRepository.kt)
+ * so that Compose previews work without any network dependency.
+ *
+ * When integrating TDLib: call [TgMessage.toLegacy()] to produce this.
+ */
 data class TelegramMessage(
-    val id: Long,
-    val text: String,
-    /** 0L for the current user (outgoing). */
-    val senderId: Long,
-    val senderName: String,
-    val timestamp: Long,
-    val isOutgoing: Boolean,
+    val id:             Long,
+    val text:           String,
+    /** 0L = current user (outgoing). */
+    val senderId:       Long,
+    val senderName:     String,
+    val timestamp:      Long,
+    val isOutgoing:     Boolean,
+    /** True when the message contains an image attachment. */
+    val hasImage:       Boolean            = false,
+    /** Tint for the image placeholder; replace with Coil AsyncImage + real URL. */
+    val imageColor:     Color              = Color.Gray,
+    /**
+     * Delivery status shown next to outgoing messages (✓ / ✓✓ / ✓✓ colored).
+     * Stub default = READ so sample data looks delivered.
+     */
+    val deliveryStatus: TgDeliveryStatus   = TgDeliveryStatus.READ,
+    /** Non-null when this is a reply — use to fetch & show quoted message header. */
+    val replyToId:      Long?              = null,
+    /** Non-null when the message was edited. */
+    val editedAt:       Long?              = null,
 )
 
 // ---------------------------------------------------------------------------
@@ -62,16 +86,17 @@ val SampleChatList = listOf(
 )
 
 val SampleMessages = listOf(
-    TelegramMessage(1L,  "We have to find them tomorrow for sure. This is the only lead we have right now.",           1L, "Ann",    1_000L, false),
-    TelegramMessage(2L,  "Yes. It is highly likely that this part-time solicitor is somehow related to the mafia.",    3L, "Yusuke", 2_000L, false),
-    TelegramMessage(3L,  "If we tail him, he may lead us straight back to his boss.",                                  3L, "Yusuke", 3_000L, false),
-    TelegramMessage(4L,  "He talked to Iida and Nishiyama over at Central Street, right?",                             2L, "Ryuji",  4_000L, false),
-    TelegramMessage(5L,  "Indeed, it seems that is where our target waits. But then... who should be the one to go?", 3L, "Yusuke", 5_000L, false),
-    TelegramMessage(6L,  "Morgana, I choose you.",                                                                     0L, "Me",     6_000L, true),
-    TelegramMessage(7L,  "That's not a bad idea. Cats have nine lives, right? Morgana can spare one for this.",        1L, "Ann",    7_000L, false),
-    TelegramMessage(8L,  "Wouldn't the mafia get caught off guard if they had a cat coming to deliver for 'em?",       2L, "Ryuji",  8_000L, false),
-    TelegramMessage(9L,  "In other words, Maaku will be going. I have no objections.",                                 3L, "Yusuke", 9_000L, false),
-    TelegramMessage(10L, "Tricking people and using that as blackmail… These bastards are true cowards.",              3L, "Yusuke", 10_000L, false),
-    TelegramMessage(11L, "It's kinda scary to think people like that are all around us in this city...",               1L, "Ann",    11_000L, false),
-    TelegramMessage(12L, "Well guys, we gotta brace ourselves. We're up against a serious criminal here.",             2L, "Ryuji",  12_000L, false),
+    TelegramMessage(1L,  "We have to find them tomorrow for sure. This is the only lead we have right now.",           1L, "Ann",    BASE_TS,              false),
+    TelegramMessage(2L,  "Yes. It is highly likely that this part-time solicitor is somehow related to the mafia.",    3L, "Yusuke", BASE_TS + 180_000,    false),
+    TelegramMessage(3L,  "If we tail him, he may lead us straight back to his boss.",                                  3L, "Yusuke", BASE_TS + 240_000,    false),
+    TelegramMessage(4L,  "He talked to Iida and Nishiyama over at Central Street, right?",                             2L, "Ryuji",  BASE_TS + 420_000,    false),
+    TelegramMessage(5L,  "Look — I photographed the meeting spot.",                                                    3L, "Yusuke", BASE_TS + 480_000,    false,
+                         hasImage = true, imageColor = P5ColorYusuke),
+    TelegramMessage(6L,  "Morgana, I choose you.",                                                                     0L, "Me",     BASE_TS + 720_000,    true),
+    TelegramMessage(7L,  "That's not a bad idea. Cats have nine lives, right? Morgana can spare one for this.",        1L, "Ann",    BASE_TS + 900_000,    false),
+    TelegramMessage(8L,  "Wouldn't the mafia get caught off guard if they had a cat coming to deliver for 'em?",       2L, "Ryuji",  BASE_TS + 1_020_000,  false),
+    TelegramMessage(9L,  "In other words, Maaku will be going. I have no objections.",                                 3L, "Yusuke", BASE_TS + 1_140_000,  false),
+    TelegramMessage(10L, "Tricking people and using that as blackmail… These bastards are true cowards.",              3L, "Yusuke", BASE_TS + 1_260_000,  false),
+    TelegramMessage(11L, "It's kinda scary to think people like that are all around us in this city...",               1L, "Ann",    BASE_TS + 1_380_000,  false),
+    TelegramMessage(12L, "Well guys, we gotta brace ourselves. We're up against a serious criminal here.",             2L, "Ryuji",  BASE_TS + 1_500_000,  false),
 )

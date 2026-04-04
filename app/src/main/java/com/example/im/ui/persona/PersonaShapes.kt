@@ -172,3 +172,83 @@ internal fun Density.avatarClipBox(): Shape = GenericShape { _, _ ->
     lineTo(40.dp.toPx(),        76.6.dp.toPx())
     close()
 }
+
+// ── Proportional avatar shapes ────────────────────────────────────────────────
+// Coordinates normalised from the original 110×90 dp avatar.
+// These scale to any Box size, so the same visual can be reused in the TopBar.
+
+internal fun Density.avatarScaledBlackBox(): Shape = GenericShape { size, _ ->
+    moveTo(0f,                   size.height * 0.189f)
+    lineTo(size.width * 0.914f,  size.height * 0.302f)
+    lineTo(size.width,           size.height * 0.808f)
+    lineTo(size.width * 0.304f,  size.height)
+    close()
+}
+
+internal fun Density.avatarScaledWhiteBox(): Shape = GenericShape { size, _ ->
+    moveTo(size.width * 0.149f,  size.height * 0.228f)
+    lineTo(size.width * 0.879f,  size.height * 0.338f)
+    lineTo(size.width * 0.967f,  size.height * 0.778f)
+    lineTo(size.width * 0.344f,  size.height * 0.893f)
+    close()
+}
+
+internal fun Density.avatarScaledColoredBox(): Shape = GenericShape { size, _ ->
+    moveTo(size.width * 0.205f,  size.height * 0.311f)
+    lineTo(size.width * 0.858f,  size.height * 0.349f)
+    lineTo(size.width * 0.948f,  size.height * 0.750f)
+    lineTo(size.width * 0.364f,  size.height * 0.851f)
+    close()
+}
+
+/** Clip mask for the portrait initial — mirrors avatarClipBox proportionally. */
+internal fun Density.avatarScaledClipBox(): Shape = GenericShape { size, _ ->
+    moveTo(size.width * 0.094f,  size.height * (-0.062f))
+    lineTo(size.width * 1.043f,  size.height * (-0.062f))
+    lineTo(size.width * 1.043f,  size.height * 0.729f)
+    lineTo(size.width * 0.364f,  size.height * 0.851f)
+    close()
+}
+
+// ── TopBar shapes ─────────────────────────────────────────────────────────────
+
+/**
+ * Full-width black trapezoid for the chat TopBar.
+ * Left bottom sits at full height; right bottom is raised by 20 dp — same lean
+ * direction as the message bubbles.
+ */
+internal fun Density.topBarShape(): Shape = GenericShape { size, _ ->
+    val raise = 20.dp.toPx()
+    moveTo(0f, 0f)
+    lineTo(size.width, 0f)
+    lineTo(size.width, size.height - raise)
+    lineTo(0f, size.height)
+    close()
+}
+
+/**
+ * Parallelogram for the TopBar contact avatar — skewed to match the bubble lean.
+ */
+internal fun Density.topBarAvatarShape(): Shape = GenericShape { size, _ ->
+    val skew = size.height * 0.20f
+    moveTo(skew, 0f)
+    lineTo(size.width, 0f)
+    lineTo(size.width - skew, size.height)
+    lineTo(0f, size.height)
+    close()
+}
+
+// ── Reaction badge shape ──────────────────────────────────────────────────────
+
+/**
+ * Sharp parallelogram for reaction sticker badges.
+ * No rounded corners — pure P5 geometry.
+ */
+internal fun Density.reactionBadgeShape(): Shape = GenericShape { size, _ ->
+    val skew = 4.dp.toPx()
+    moveTo(skew, 0f)
+    lineTo(size.width, 0f)
+    lineTo(size.width - skew, size.height)
+    lineTo(0f, size.height)
+    close()
+}

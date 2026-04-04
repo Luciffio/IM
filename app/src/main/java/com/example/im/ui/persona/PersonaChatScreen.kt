@@ -27,6 +27,13 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
@@ -57,9 +64,12 @@ import java.time.LocalDate
 
 @Composable
 fun PersonaChatScreen(
-    state:  PersonaChatState = rememberPersonaChatState(),
-    onBack: () -> Unit       = {},
-    date:   LocalDate        = LocalDate.now(),
+    state:          PersonaChatState = rememberPersonaChatState(),
+    onBack:         () -> Unit       = {},
+    date:           LocalDate        = LocalDate.now(),
+    contactName:    String           = "PHANTOM THIEVES",
+    contactColor:   Color            = P5ColorAnn,
+    contactInitial: String           = "P",
 ) {
     var showEmojiPanel  by remember { mutableStateOf(false) }
     var inputText       by remember { mutableStateOf("") }
@@ -75,7 +85,13 @@ fun PersonaChatScreen(
                 .background(PersonaRed)
                 .imePadding(),
         ) {
-            PersonaTopBar(onBack = onBack, date = date)
+            PersonaTopBar(
+                onBack         = onBack,
+                date           = date,
+                contactName    = contactName,
+                contactColor   = contactColor,
+                contactInitial = contactInitial,
+            )
 
             PersonaTranscript(
                 entries   = state.entries,
@@ -141,11 +157,11 @@ private fun PersonaInputBar(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color.White)
+            .background(Color.Black)
             .padding(WindowInsets.navigationBars.asPaddingValues())
             .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
-        // [+] Attachment button
+        // [📎] Paperclip attachment button
         AttachButton(onClick = { /* TODO: open file picker */ })
 
         // Text field
@@ -156,9 +172,9 @@ private fun PersonaInputBar(
             textStyle     = TextStyle(
                 fontFamily = PersonaFont,
                 fontSize   = 15.sp,
-                color      = Color.Black,
+                color      = Color.White,
             ),
-            cursorBrush     = SolidColor(Color.Black),
+            cursorBrush     = SolidColor(Color.White),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
             keyboardActions = KeyboardActions(onSend = { if (text.isNotBlank()) onSend() }),
             decorationBox   = { inner ->
@@ -166,7 +182,7 @@ private fun PersonaInputBar(
                     contentAlignment = Alignment.CenterStart,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFFF0F0F0))
+                        .background(Color(0xFF1A1A1A))
                         .padding(horizontal = 14.dp, vertical = 10.dp),
                 ) {
                     if (text.isEmpty()) {
@@ -174,7 +190,7 @@ private fun PersonaInputBar(
                             text       = "Enter message...",
                             fontFamily = PersonaFont,
                             fontSize   = 15.sp,
-                            color      = Color(0xFF999999),
+                            color      = Color(0xFF555555),
                         )
                     }
                     inner()
@@ -197,7 +213,10 @@ private fun PersonaInputBar(
     }
 }
 
-// ── Attach button (+) ────────────────────────────────────────────────────────
+// ── Attach button (📎 paperclip) ──────────────────────────────────────────────
+//
+// Standard smooth paperclip: outer oval + inner 270° arc, tilted -35°.
+// Intentional style exception — the only curved icon in the P5 UI.
 
 @Composable
 private fun AttachButton(onClick: () -> Unit) {
@@ -208,30 +227,34 @@ private fun AttachButton(onClick: () -> Unit) {
         modifier = Modifier
             .size(40.dp)
             .drawWithCache {
-                val cx    = size.width / 2f
-                val cy    = size.height / 2f
-                val arm   = size.width * 0.28f   // half-length of each arm
-                val thick = with(density) { 3.dp.toPx() }
-
-                // P5 plus sign: two thick rectangles forming a cross
-                val hPath = Path().apply {
-                    moveTo(cx - arm, cy - thick / 2f)
-                    lineTo(cx + arm, cy - thick / 2f)
-                    lineTo(cx + arm, cy + thick / 2f)
-                    lineTo(cx - arm, cy + thick / 2f)
-                    close()
-                }
-                val vPath = Path().apply {
-                    moveTo(cx - thick / 2f, cy - arm)
-                    lineTo(cx + thick / 2f, cy - arm)
-                    lineTo(cx + thick / 2f, cy + arm)
-                    lineTo(cx - thick / 2f, cy + arm)
-                    close()
-                }
+                val sw = with(density) { 2.0.dp.toPx() }
+                val cx = size.width  / 2f
+                val cy = size.height / 2f
+                val ow = size.width  * 0.27f   // outer oval half-width
+                val oh = size.height * 0.40f   // outer oval half-height
 
                 onDrawBehind {
-                    drawPath(hPath, Color.Black)
-                    drawPath(vPath, Color.Black)
+                    rotate(-35f, pivot = androidx.compose.ui.geometry.Offset(cx, cy)) {
+                        // Outer full oval
+                        drawOval(
+                            color   = Color.White,
+                            topLeft = androidx.compose.ui.geometry.Offset(cx - ow, cy - oh),
+                            size    = Size(ow * 2f, oh * 2f),
+                            style   = Stroke(width = sw),
+                        )
+                        // Inner 270° arc — open at the bottom, creating the clip gap
+                        val iw = ow - sw * 2.2f
+                        val ih = oh * 0.50f
+                        drawArc(
+                            color      = Color.White,
+                            startAngle = 90f,
+                            sweepAngle = 270f,
+                            useCenter  = false,
+                            topLeft    = androidx.compose.ui.geometry.Offset(cx - iw, cy - oh + sw * 1.5f),
+                            size       = Size(iw * 2f, ih * 2f),
+                            style      = Stroke(width = sw, cap = StrokeCap.Round),
+                        )
+                    }
                 }
             }
             .clickable(
@@ -247,8 +270,9 @@ private fun AttachButton(onClick: () -> Unit) {
 @Composable
 private fun EmojiButton(active: Boolean, onClick: () -> Unit) {
     val density  = LocalDensity.current
-    val fgColor  = if (active) Color.White else Color.Black
-    val bgColor  = if (active) Color.Black else Color.Transparent
+    // On black bar: inactive = white icon; active = black icon on white bg
+    val fgColor  = if (active) Color.Black else Color.White
+    val bgColor  = if (active) Color.White else Color.Transparent
 
     Box(
         contentAlignment = Alignment.Center,
@@ -298,8 +322,9 @@ private fun EmojiButton(active: Boolean, onClick: () -> Unit) {
 @Composable
 private fun SendButton(enabled: Boolean, onClick: () -> Unit) {
     val density    = LocalDensity.current
-    val bgColor    = if (enabled) Color.Black else Color(0xFF888888)
-    val innerColor = if (enabled) Color.White else Color(0xFFBBBBBB)
+    // On black bar: white outer frame + black inner fill; text = white (= bgColor)
+    val bgColor    = if (enabled) Color.White else Color(0xFF666666)
+    val innerColor = if (enabled) Color.Black else Color(0xFF444444)
 
     val shape = GenericShape { size, _ ->
         val skew = with(density) { 6.dp.toPx() }
@@ -405,18 +430,11 @@ fun PersonaTranscript(
                 val msgReactions = reactions[entry.message.id]
                 if (!msgReactions.isNullOrEmpty()) {
                     ReactionBadge(
-                        reactions  = msgReactions,
-                        // Incoming tip is on the left → reaction at bottom-right (towards center)
-                        // Outgoing tip is on the right → reaction at bottom-left (towards center)
-                        modifier   = Modifier
-                            .align(
-                                if (entry.message.isOutgoing) Alignment.BottomStart
-                                else Alignment.BottomEnd
-                            )
-                            .offset(
-                                x = if (entry.message.isOutgoing) 48.dp else (-48).dp,
-                                y = (-6).dp,
-                            ),
+                        reactions = msgReactions,
+                        // Sticker overlaps the bubble's bottom edge by 6 dp.
+                        modifier  = Modifier
+                            .align(Alignment.BottomEnd)
+                            .offset(x = (-6).dp, y = (-6).dp),
                     )
                 }
             }
@@ -426,51 +444,70 @@ fun PersonaTranscript(
 
 // ── Reaction badge ────────────────────────────────────────────────────────────
 
+// Fixed tilt angles for a "scattered stickers" look — alternates per badge index.
+private val ReactionTilts = listOf(-2.5f, 1.8f, -3.2f, 2.0f, -1.5f, 2.8f)
+
 @Composable
 private fun ReactionBadge(
     reactions: Map<String, Int>,
     modifier:  Modifier = Modifier,
 ) {
-    val density = LocalDensity.current
-
-    // P5-styled skewed pill
-    val shape = GenericShape { size, _ ->
-        val r = with(density) { 4.dp.toPx() }
-        val skew = with(density) { 3.dp.toPx() }
-        moveTo(r + skew, 0f)
-        lineTo(size.width - r, 0f)
-        lineTo(size.width, r)
-        lineTo(size.width - skew, size.height - r)
-        lineTo(size.width - skew - r, size.height)
-        lineTo(r, size.height)
-        lineTo(0f, size.height - r)
-        lineTo(skew, r)
-        close()
-    }
-
     Row(
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
         modifier = modifier,
     ) {
-        reactions.forEach { (emoji, count) ->
-            Row(
-                verticalAlignment     = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
-                modifier = Modifier
-                    .clip(shape)
-                    .background(Color(0xFF1A1A1A))
-                    .padding(horizontal = 7.dp, vertical = 3.dp),
-            ) {
-                Text(emoji, fontSize = 13.sp)
-                if (count > 1) {
-                    Text(
-                        text       = count.toString(),
-                        fontFamily = PersonaFont,
-                        fontSize   = 11.sp,
-                        color      = Color.White,
-                    )
-                }
+        reactions.entries.forEachIndexed { index, (emoji, count) ->
+            SingleReactionBadge(
+                emoji   = emoji,
+                count   = count,
+                tiltDeg = ReactionTilts[index % ReactionTilts.size],
+            )
+        }
+    }
+}
+
+/**
+ * One reaction sticker: pure-black parallelogram, white 1-dp border drawn
+ * BEFORE clip so it's visible at the outer edge, emoji in natural color,
+ * white bold counter.
+ */
+@Composable
+private fun SingleReactionBadge(
+    emoji:   String,
+    count:   Int,
+    tiltDeg: Float,
+) {
+    val density    = LocalDensity.current
+    val badgeShape = with(density) { reactionBadgeShape() }
+
+    Row(
+        verticalAlignment     = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        modifier = Modifier
+            .rotate(tiltDeg)
+            // drawBehind executes BEFORE clip is applied → white stroke is unclipped
+            // → visible as a 1-dp border around the parallelogram edge.
+            .drawBehind {
+                val outline = badgeShape.createOutline(size, layoutDirection, this)
+                drawOutline(
+                    outline = outline,
+                    color   = Color.White,
+                    style   = Stroke(width = with(density) { 1.5.dp.toPx() }),
+                )
             }
+            .clip(badgeShape)
+            .background(Color.Black)
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+    ) {
+        Text(emoji, fontSize = 13.sp)
+        if (count > 1) {
+            Text(
+                text       = count.toString(),
+                fontFamily = PersonaFont,
+                fontWeight = FontWeight.Bold,
+                fontSize   = 11.sp,
+                color      = Color.White,
+            )
         }
     }
 }

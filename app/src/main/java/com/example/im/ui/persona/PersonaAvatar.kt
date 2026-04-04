@@ -12,7 +12,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -62,6 +64,10 @@ fun PersonaAvatar(entry: PersonaEntry) {
                 .align(Alignment.TopEnd)
                 .padding(top = 4.dp, end = 8.dp),
         )
+        // TODO(TG): replace AvatarPortrait with real profile photo via Coil:
+        //   AsyncImage(model = participant.photoUrl, modifier = modifier
+        //       .graphicsLayer { transformOrigin = TransformOrigin(0.5f, 1.15f)
+        //                        scaleX = scale; scaleY = scale })
     }
 }
 
@@ -78,10 +84,16 @@ private fun AvatarPortrait(
     scale: Float,
     modifier: Modifier = Modifier,
 ) {
+    // Reference: Avatar.kt uses graphicsLayer { transformOrigin = TransformOrigin(0.5f, 1.15f) }
+    // so the portrait scales from below its baseline — exact match with original game animation.
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
-            .scale(scaleX = scale, scaleY = scale)
+            .graphicsLayer {
+                transformOrigin = TransformOrigin(pivotFractionX = 0.5f, pivotFractionY = 1.15f)
+                scaleX = scale
+                scaleY = scale
+            }
             .background(participant.color.copy(alpha = 0.6f)),
     ) {
         Text(

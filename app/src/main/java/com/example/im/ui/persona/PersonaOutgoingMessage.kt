@@ -1,7 +1,11 @@
 package com.example.im.ui.persona
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -9,65 +13,113 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.center
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 /**
- * An outgoing message (sent by the player / current user). Right-aligned.
- * Exact port of Reply.kt from the reference.
- *
- * Scale pivot is the right edge, center-Y — same as the reference.
+ * Outgoing message (current user). Right-aligned within full width.
+ * Adds a floating [TimestampLabel] to the bottom-start — "margin note" style.
  */
 @Composable
 fun PersonaOutgoingMessage(entry: PersonaEntry, modifier: Modifier = Modifier) {
     val density = LocalDensity.current
+    val msg     = entry.message
+
+    // Pre-compute bubble outlines once per size.
+    val bubbleMod = Modifier
+        .drawWithCache {
+            val outerStemO = with(density) { outgoingOuterStem() }
+                .createOutline(size, layoutDirection, this)
+            val outerBoxO  = with(density) { outgoingOuterBox() }
+                .createOutline(size, layoutDirection, this)
+            val innerStemO = with(density) { outgoingInnerStem() }
+                .createOutline(size, layoutDirection, this)
+            val innerBoxO  = with(density) { outgoingInnerBox() }
+                .createOutline(size, layoutDirection, this)
+            val pivot = Offset(size.width, size.center.y)
+
+            onDrawBehind {
+                scale(entry.messageHorizontalScale.value, entry.messageVerticalScale.value, pivot) {
+                    drawOutline(outerBoxO,  Color.Black)
+                    drawOutline(outerStemO, Color.Black)
+                    drawOutline(innerStemO, Color.White)
+                    drawOutline(innerBoxO,  Color.White)
+                }
+            }
+        }
+        .alpha(entry.messageTextAlpha.value)
 
     Box(
-        contentAlignment = Alignment.CenterEnd,
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 4.dp),
     ) {
-        Text(
-            text       = entry.message.text,
-            style      = MaterialTheme.typography.bodyMedium,
-            color      = Color.Black,
-            fontFamily = PersonaFont,
-            modifier   = Modifier
-                .drawWithCache {
-                    val outerStemO = with(density) { outgoingOuterStem() }
-                        .createOutline(size, layoutDirection, this)
-                    val outerBoxO  = with(density) { outgoingOuterBox() }
-                        .createOutline(size, layoutDirection, this)
-                    val innerStemO = with(density) { outgoingInnerStem() }
-                        .createOutline(size, layoutDirection, this)
-                    val innerBoxO  = with(density) { outgoingInnerBox() }
-                        .createOutline(size, layoutDirection, this)
-
-                    // Pivot = right edge, vertical center.
-                    val pivot = Offset(size.width, size.center.y)
-
-                    onDrawBehind {
-                        scale(
-                            scaleX = entry.messageHorizontalScale.value,
-                            scaleY = entry.messageVerticalScale.value,
-                            pivot  = pivot,
-                        ) {
-                            drawOutline(outerBoxO, color = Color.Black)
-                            drawOutline(outerStemO, color = Color.Black)
-                            drawOutline(innerStemO, color = Color.White)
-                            drawOutline(innerBoxO,  color = Color.White)
-                        }
-                    }
+        // ── Bubble (right edge) ──────────────────────────────────────────────
+        if (msg.hasImage) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .then(bubbleMod)
+                    .padding(start = 44.dp, top = 16.dp, end = 40.dp, bottom = 16.dp),
+            ) {
+                val imgShape = with(density) { outgoingInnerBox() }
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(110.dp)
+                        .drawBehind {
+                            val outline = imgShape.createOutline(size, layoutDirection, this)
+                            drawOutline(outline, msg.imageColor)
+                            // Black border (matches outgoing bubble interior = white fill)
+                            drawOutline(
+                                outline = outline,
+                                color   = Color.Black,
+                                style   = Stroke(width = with(density) { 1.dp.toPx() }),
+                            )
+                        },
+                ) {
+                    Text(text = "🖼", fontSize = 30.sp)
                 }
-                .alpha(entry.messageTextAlpha.value)
-                .padding(start = 44.dp, top = 20.dp, end = 40.dp, bottom = 20.dp),
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text       = msg.text,
+                    style      = MaterialTheme.typography.bodyMedium,
+                    color      = Color.Black,
+                    fontFamily = PersonaFont,
+                )
+            }
+        } else {
+            Text(
+                text       = msg.text,
+                style      = MaterialTheme.typography.bodyMedium,
+                color      = Color.Black,
+                fontFamily = PersonaFont,
+                modifier   = Modifier
+                    .align(Alignment.CenterEnd)
+                    .then(bubbleMod)
+                    .padding(start = 44.dp, top = 20.dp, end = 40.dp, bottom = 20.dp),
+            )
+        }
+
+        // ── Timestamp — floats to the left in the entry gap ─────────────────
+        TimestampLabel(
+            timestamp  = msg.timestamp,
+            msgId      = msg.id,
+            isOutgoing = true,
+            modifier   = Modifier
+                .align(Alignment.BottomStart)
+                .padding(start = 10.dp)
+                .offset(y = 8.dp),
         )
     }
 }
