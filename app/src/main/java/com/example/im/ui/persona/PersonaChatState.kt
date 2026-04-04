@@ -13,6 +13,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.draw.CacheDrawScope
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import kotlinx.coroutines.CoroutineScope
@@ -59,25 +60,23 @@ object TranscriptSizes {
     val AvatarSize   = PersonaSizes.AvatarSize
     val EntrySpacing = PersonaSizes.EntrySpacing
 
-    /** Returns the top-of-entry drawing offset for the connecting line. */
-    fun getTopDrawingOffset(scope: CacheDrawScope, entry: PersonaEntry): Offset = with(scope) {
-        return if (entry.message.isOutgoing) {
-            val shift = size.width - (PersonaSizes.OutgoingCenterX.toPx() * 2f)
-            Offset(x = shift, y = 0f)
-        } else {
-            Offset.Zero
-        }
-    }
+    /**
+     * Returns the top-of-entry drawing offset for the connecting line.
+     *
+     * Outgoing lineCoordinates are stored in screen-absolute X (see createEntryState),
+     * so no horizontal shift is needed here for either sender direction.
+     */
+    fun getTopDrawingOffset(scope: CacheDrawScope, entry: PersonaEntry): Offset = Offset.Zero
 
-    /** Returns the bottom-of-entry drawing offset for the connecting line. */
+    /**
+     * Returns the bottom-of-entry drawing offset for the connecting line.
+     *
+     * X is always 0 because lineCoordinates already encode the correct screen-absolute X.
+     * Previously the X shift used [CacheDrawScope.size.width], which broke for incoming
+     * entries (narrower than full screen width) pointing to outgoing entries.
+     */
     fun getBottomDrawingOffset(scope: CacheDrawScope, entry: PersonaEntry): Offset = with(scope) {
-        val verticalShift = size.height + EntrySpacing.toPx()
-        return if (entry.message.isOutgoing) {
-            val shift = size.width - (PersonaSizes.OutgoingCenterX.toPx() * 2f)
-            Offset(x = shift, y = verticalShift)
-        } else {
-            Offset(x = 0f, y = verticalShift)
-        }
+        Offset(x = 0f, y = size.height + EntrySpacing.toPx())
     }
 }
 
@@ -90,10 +89,13 @@ fun rememberPersonaChatState(
     participants: Map<Long, ChatParticipant> = SampleParticipants,
     messages: List<TelegramMessage> = SampleMessages,
 ): PersonaChatState {
-    val density = LocalDensity.current
-    val scope   = rememberCoroutineScope()
-    return remember(density) {
-        PersonaChatState(density, scope, participants, messages)
+    val density      = LocalDensity.current
+    val scope        = rememberCoroutineScope()
+    // screenWidthPx is used to store outgoing lineCoordinates in screen-absolute X,
+    // so the connecting line reaches the outgoing bubble from ANY entry width.
+    val screenWidthPx = with(density) { LocalConfiguration.current.screenWidthDp.toFloat() * density.density }
+    return remember(density, screenWidthPx) {
+        PersonaChatState(density, scope, participants, messages, screenWidthPx)
     }
 }
 
@@ -103,6 +105,8 @@ class PersonaChatState internal constructor(
     private val coroutineScope: CoroutineScope,
     private val participants: Map<Long, ChatParticipant>,
     private val allMessages: List<TelegramMessage>,
+    /** Full screen width in px — used to anchor outgoing line coordinates to the right edge. */
+    private val screenWidthPx: Float = 0f,
 ) {
     private var cursor = 0
     private var nextId = 100L
@@ -183,9 +187,14 @@ class PersonaChatState internal constructor(
         val lineCoordinates = if (msg.isOutgoing) {
             val cx = PersonaSizes.OutgoingCenterX.toPx()
             val cy = PersonaSizes.OutgoingCenterY.toPx()
+            // Store X in screen-absolute terms: (screenWidth - cx) is the right-side anchor.
+            // This makes getTopDrawingOffset / getBottomDrawingOffset return x=0 (no shift),
+            // so the line endpoint is correct regardless of which entry's drawConnectingLine
+            // is computing the coordinates (incoming entries are narrower than screen width).
+            val anchorX = if (screenWidthPx > 0f) screenWidthPx - cx else cx
             LineCoordinates(
-                leftPoint  = Offset(cx - width / 2f, cy),
-                rightPoint = Offset(cx + width / 2f, cy),
+                leftPoint  = Offset(anchorX - width / 2f, cy),
+                rightPoint = Offset(anchorX + width / 2f, cy),
             )
         } else {
             val avatarCenterX = PersonaSizes.AvatarSize.width.toPx() / 2f
