@@ -27,7 +27,7 @@ import androidx.compose.ui.unit.sp
 
 /**
  * Outgoing message (current user). Right-aligned within full width.
- * Adds a floating [TimestampLabel] to the bottom-start — "margin note" style.
+ * Timestamp badge overlaps the top-right corner of the bubble.
  */
 @Composable
 fun PersonaOutgoingMessage(entry: PersonaEntry, modifier: Modifier = Modifier) {
@@ -63,63 +63,59 @@ fun PersonaOutgoingMessage(entry: PersonaEntry, modifier: Modifier = Modifier) {
             .fillMaxWidth()
             .padding(horizontal = 4.dp),
     ) {
-        // ── Bubble (right edge) ──────────────────────────────────────────────
-        if (msg.hasImage) {
-            Column(
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .then(bubbleMod)
-                    .padding(start = 44.dp, top = 16.dp, end = 40.dp, bottom = 16.dp),
-            ) {
-                val imgShape = with(density) { outgoingInnerBox() }
-                Box(
-                    contentAlignment = Alignment.Center,
+        // ── Bubble + timestamp badge (top-right) ────────────────────────────
+        Box(modifier = Modifier.align(Alignment.CenterEnd)) {
+            if (msg.hasImage) {
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(110.dp)
-                        .drawBehind {
-                            val outline = imgShape.createOutline(size, layoutDirection, this)
-                            drawOutline(outline, msg.imageColor)
-                            // Black border (matches outgoing bubble interior = white fill)
-                            drawOutline(
-                                outline = outline,
-                                color   = Color.Black,
-                                style   = Stroke(width = with(density) { 1.dp.toPx() }),
-                            )
-                        },
+                        .then(bubbleMod)
+                        .padding(start = 44.dp, top = 16.dp, end = 40.dp, bottom = 16.dp),
                 ) {
-                    Text(text = "🖼", fontSize = 30.sp)
+                    val imgShape = with(density) { outgoingInnerBox() }
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(110.dp)
+                            .drawBehind {
+                                val outline = imgShape.createOutline(size, layoutDirection, this)
+                                drawOutline(outline, msg.imageColor)
+                                drawOutline(
+                                    outline = outline,
+                                    color   = Color.Black,
+                                    style   = Stroke(width = with(density) { 1.dp.toPx() }),
+                                )
+                            },
+                    ) {
+                        Text(text = "🖼", fontSize = 30.sp)
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text       = msg.text,
+                        style      = MaterialTheme.typography.bodyMedium,
+                        color      = Color.Black,
+                        fontFamily = PersonaFont,
+                    )
                 }
-                Spacer(Modifier.height(8.dp))
+            } else {
                 Text(
                     text       = msg.text,
                     style      = MaterialTheme.typography.bodyMedium,
                     color      = Color.Black,
                     fontFamily = PersonaFont,
+                    modifier   = Modifier
+                        .then(bubbleMod)
+                        .padding(start = 44.dp, top = 20.dp, end = 40.dp, bottom = 20.dp),
                 )
             }
-        } else {
-            Text(
-                text       = msg.text,
-                style      = MaterialTheme.typography.bodyMedium,
-                color      = Color.Black,
-                fontFamily = PersonaFont,
-                modifier   = Modifier
-                    .align(Alignment.CenterEnd)
-                    .then(bubbleMod)
-                    .padding(start = 44.dp, top = 20.dp, end = 40.dp, bottom = 20.dp),
+
+            // Timestamp badge overlaps top-right corner of the bubble.
+            TimestampBadge(
+                timestamp = msg.timestamp,
+                modifier  = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = 2.dp, y = (-9).dp),
             )
         }
-
-        // ── Timestamp — floats to the left in the entry gap ─────────────────
-        TimestampLabel(
-            timestamp  = msg.timestamp,
-            msgId      = msg.id,
-            isOutgoing = true,
-            modifier   = Modifier
-                .align(Alignment.BottomStart)
-                .padding(start = 10.dp)
-                .offset(y = 8.dp),
-        )
     }
 }

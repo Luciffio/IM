@@ -17,7 +17,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawOutline
@@ -25,7 +24,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.time.Instant
@@ -36,30 +35,17 @@ import java.time.format.DateTimeFormatter
  * Incoming message (other participant). Renders:
  *  - [PersonaAvatar] on the left
  *  - [IncomingTextBox] overlapping to the right (with optional image)
- *  - [TimestampLabel] floating below — "margin note" aesthetic
+ *  - [TimestampBadge] overlapping top-left corner of the bubble
  */
 @Composable
 fun PersonaIncomingMessage(entry: PersonaEntry, modifier: Modifier = Modifier) {
-    Box {
-        IncomingEntryLayout(
-            avatar   = { PersonaAvatar(entry) },
-            textBox  = { IncomingTextBox(entry) },
-            modifier = Modifier
-                .padding(horizontal = 8.dp)
-                .then(modifier),
-        )
-
-        // Timestamp floats in the gap between list items — chaotic margin-note look.
-        TimestampLabel(
-            timestamp  = entry.message.timestamp,
-            msgId      = entry.message.id,
-            isOutgoing = false,
-            modifier   = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = 10.dp)
-                .offset(y = 8.dp),
-        )
-    }
+    IncomingEntryLayout(
+        avatar   = { PersonaAvatar(entry) },
+        textBox  = { IncomingTextBox(entry) },
+        modifier = Modifier
+            .padding(horizontal = 8.dp)
+            .then(modifier),
+    )
 }
 
 // ── Entry layout (avatar + text box side-by-side) ─────────────────────────────
@@ -134,7 +120,7 @@ private fun IncomingTextBox(entry: PersonaEntry) {
         }
         .alpha(entry.messageTextAlpha.value)
 
-    // Wrap in Box so punctuation mark can be overlaid exactly as in reference Entry.kt
+    // Box: punctuation overlay + timestamp badge at top-left of the bubble.
     Box {
         if (msg.hasImage) {
             Column(
@@ -186,7 +172,7 @@ private fun IncomingTextBox(entry: PersonaEntry) {
             Text(
                 text       = "?",
                 fontFamily = PersonaFont,
-                fontWeight = androidx.compose.ui.text.font.FontWeight.Black,
+                fontWeight = FontWeight.Black,
                 fontSize   = 22.sp,
                 color      = Color.White,
                 modifier   = Modifier
@@ -195,22 +181,27 @@ private fun IncomingTextBox(entry: PersonaEntry) {
                     .graphicsLayer { scaleX = s; scaleY = s },
             )
         }
+
+        // Timestamp badge — white P5 parallelogram, top-left of bubble.
+        TimestampBadge(
+            timestamp = entry.message.timestamp,
+            modifier  = Modifier
+                .align(Alignment.TopStart)
+                .offset(x = 26.dp, y = (-9).dp),
+        )
     }
 }
 
-// ── Timestamp label ───────────────────────────────────────────────────────────
+// ── Timestamp badge ───────────────────────────────────────────────────────────
 
 /**
- * Small italic timestamp rendered OUTSIDE the bubble — floats in the gap
- * between items. Each message gets a unique tilt and x-offset derived from
- * its ID so they look like scattered margin notes.
+ * P5-style timestamp: white parallelogram with 1.5 dp black border, bold black text.
+ * Positioned by the caller — top-left for incoming, top-right for outgoing.
  */
 @Composable
-internal fun TimestampLabel(
-    timestamp:  Long,
-    msgId:      Long,
-    isOutgoing: Boolean,
-    modifier:   Modifier = Modifier,
+internal fun TimestampBadge(
+    timestamp: Long,
+    modifier:  Modifier = Modifier,
 ) {
     val time = remember(timestamp) {
         Instant.ofEpochMilli(timestamp)
@@ -218,20 +209,25 @@ internal fun TimestampLabel(
             .toLocalTime()
             .format(DateTimeFormatter.ofPattern("HH:mm"))
     }
-
-    // Pseudo-random tilt: −3.2° … +3.2°, direction flips for outgoing.
-    val rawTilt = ((msgId % 9) - 4) * 0.8f
-    val tilt    = if (isOutgoing) -rawTilt else rawTilt
-    val xShift  = ((msgId % 5) - 2).toInt().dp
+    val density = LocalDensity.current
+    val shape   = with(density) { reactionBadgeShape() }   // same P5 parallelogram
 
     Text(
         text       = time,
         fontFamily = PersonaFont,
-        fontStyle  = FontStyle.Italic,
-        fontSize   = 10.sp,
-        color      = Color.White.copy(alpha = 0.70f),
+        fontWeight = FontWeight.Bold,
+        fontSize   = 9.sp,
+        color      = Color.Black,
         modifier   = modifier
-            .offset(x = xShift)
-            .rotate(tilt),
+            .drawBehind {
+                val outline = shape.createOutline(size, layoutDirection, this)
+                drawOutline(outline, Color.White)
+                drawOutline(
+                    outline = outline,
+                    color   = Color.Black,
+                    style   = Stroke(width = with(density) { 1.5.dp.toPx() }),
+                )
+            }
+            .padding(horizontal = 6.dp, vertical = 2.dp),
     )
 }

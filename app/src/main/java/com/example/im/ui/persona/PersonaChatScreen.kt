@@ -52,6 +52,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
@@ -329,17 +331,12 @@ private fun EmojiButton(active: Boolean, onClick: () -> Unit) {
     ) {}
 }
 
-// ── Send button — P5 octagon style (ref: Persona action buttons) ──────────────
-//
-// Layer 1 (back) : white filled octagon  (flat edges at top/bottom/left/right)
-// Layer 2        : black filled circle   (~73 % of octagon radius)
-// Layer 3 (front): white equilateral triangle pointing RIGHT (~54 % of circle)
-//
-// Disabled state: all white → dim-gray.
+// ── Send button — black circle + white ring + ">" chevron ────────────────────
 
 @Composable
 private fun SendButton(enabled: Boolean, onClick: () -> Unit) {
-    val fgColor = if (enabled) Color.White else Color(0xFF555555)
+    val fg = if (enabled) Color.White else Color(0xFF555555)
+    val bg = if (enabled) Color.Black else Color(0xFF1A1A1A)
 
     Box(
         modifier = Modifier
@@ -347,34 +344,29 @@ private fun SendButton(enabled: Boolean, onClick: () -> Unit) {
             .drawWithCache {
                 val cx      = size.width  / 2f
                 val cy      = size.height / 2f
-                val outerR  = size.width  * 0.45f     // octagon circumradius
-                val circleR = outerR * 0.855f          // black circle radius (~45% thinner ring)
-                val triR    = circleR * 0.54f          // triangle circumradius
+                val r       = size.width  * 0.42f
+                val strokeW = r * 0.14f
 
-                // Stop-sign octagon: vertices at 22.5° + k·45° (screen coords, y-down)
-                val octPath = Path().apply {
-                    for (i in 0 until 8) {
-                        val a = Math.toRadians(22.5 + i * 45.0)
-                        val x = cx + outerR * Math.cos(a).toFloat()
-                        val y = cy + outerR * Math.sin(a).toFloat()
-                        if (i == 0) moveTo(x, y) else lineTo(x, y)
-                    }
-                    close()
-                }
-
-                // Right-pointing equilateral triangle
-                // Vertices at 0°, 120°, 240° clockwise from the right
-                val triPath = Path().apply {
-                    moveTo(cx + triR,         cy)
-                    lineTo(cx - triR * 0.5f,  cy + triR * 0.866f)
-                    lineTo(cx - triR * 0.5f,  cy - triR * 0.866f)
-                    close()
+                // ">" chevron: two lines meeting at a right-pointing tip
+                val arm  = r * 0.36f
+                val tipX = cx + r * 0.14f
+                val chevron = Path().apply {
+                    moveTo(tipX - arm, cy - arm)
+                    lineTo(tipX,       cy)
+                    lineTo(tipX - arm, cy + arm)
                 }
 
                 onDrawBehind {
-                    drawPath(octPath, fgColor)          // 1. octagon
-                    drawCircle(Color.Black, circleR)    // 2. circle
-                    drawPath(triPath, fgColor)          // 3. triangle
+                    drawCircle(bg, r)
+                    drawCircle(fg, r, style = Stroke(strokeW))
+                    drawPath(
+                        chevron, fg,
+                        style = Stroke(
+                            width = strokeW * 1.3f,
+                            cap   = StrokeCap.Square,
+                            join  = StrokeJoin.Miter,
+                        ),
+                    )
                 }
             }
             .then(
