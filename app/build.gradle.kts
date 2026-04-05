@@ -3,12 +3,6 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
-// Read secrets from local.properties (gitignored) — never hardcode keys here.
-val localProps = java.util.Properties().apply {
-    val f = rootProject.file("local.properties")
-    if (f.exists()) load(f.inputStream())
-}
-
 android {
     namespace = "com.example.im"
     compileSdk {
@@ -24,8 +18,11 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        buildConfigField("String", "TG_APP_ID",   "\"${localProps["tg.app.id"]   ?: ""}\"")
-        buildConfigField("String", "TG_APP_HASH", "\"${localProps["tg.app.hash"] ?: ""}\"")
+        // Read from local.properties (gitignored) — stored as gradle.properties
+        val tgAppId = project.findProperty("TG_APP_ID")?.toString() ?: ""
+        val tgAppHash = project.findProperty("TG_APP_HASH")?.toString() ?: ""
+        buildConfigField("String", "TG_APP_ID", "\"$tgAppId\"")
+        buildConfigField("String", "TG_APP_HASH", "\"$tgAppHash\"")
     }
 
     buildTypes {
