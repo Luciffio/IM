@@ -3,6 +3,19 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+// Read secrets from local.properties (gitignored).
+// project.findProperty() doesn't pick up local.properties, so we parse it manually.
+fun localProp(key: String): String {
+    val f = rootProject.file("local.properties")
+    if (!f.exists()) return ""
+    return f.readLines()
+        .filter { !it.startsWith("#") && it.contains("=") }
+        .associate { line ->
+            val i = line.indexOf('=')
+            line.substring(0, i).trim() to line.substring(i + 1).trim()
+        }[key] ?: ""
+}
+
 android {
     namespace = "com.example.im"
     compileSdk {
@@ -18,11 +31,8 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // Read from local.properties (gitignored) — stored as gradle.properties
-        val tgAppId = project.findProperty("TG_APP_ID")?.toString() ?: ""
-        val tgAppHash = project.findProperty("TG_APP_HASH")?.toString() ?: ""
-        buildConfigField("String", "TG_APP_ID", "\"$tgAppId\"")
-        buildConfigField("String", "TG_APP_HASH", "\"$tgAppHash\"")
+        buildConfigField("String", "TG_APP_ID",   "\"${localProp("TG_APP_ID")}\"")
+        buildConfigField("String", "TG_APP_HASH", "\"${localProp("TG_APP_HASH")}\"")
     }
 
     buildTypes {
@@ -45,7 +55,7 @@ android {
 
     packaging {
         jniLibs {
-            useLegacyPackaging = true   // extract .so files so we can exec libbackend.so
+            useLegacyPackaging = true
         }
     }
 }
