@@ -75,6 +75,7 @@ fun PersonaChatScreen(
     contactName:    String           = "PHANTOM THIEVES",
     contactColor:   Color            = P5ColorAnn,
     contactInitial: String           = "P",
+    showTimestamps: Boolean          = true,
 ) {
     var showEmojiPanel  by remember { mutableStateOf(false) }
     var inputText       by remember { mutableStateOf("") }
@@ -93,9 +94,10 @@ fun PersonaChatScreen(
                 .imePadding(),
         ) {
             PersonaTranscript(
-                entries   = state.entries,
-                reactions = reactions,
-                onLongPress = { entry, offset ->
+                entries        = state.entries,
+                reactions      = reactions,
+                showTimestamps = showTimestamps,
+                onLongPress    = { entry, offset ->
                     selectedEntry  = entry
                     menuAnchor     = offset
                     showEmojiPanel = false
@@ -383,10 +385,11 @@ private fun SendButton(enabled: Boolean, onClick: () -> Unit) {
 
 @Composable
 fun PersonaTranscript(
-    entries:     List<PersonaEntry>,
-    reactions:   Map<Long, Map<String, Int>>    = emptyMap(),
-    onLongPress: (PersonaEntry, Offset) -> Unit = { _, _ -> },
-    modifier:    Modifier = Modifier,
+    entries:        List<PersonaEntry>,
+    reactions:      Map<Long, Map<String, Int>>    = emptyMap(),
+    showTimestamps: Boolean                        = true,
+    onLongPress:    (PersonaEntry, Offset) -> Unit = { _, _ -> },
+    modifier:       Modifier = Modifier,
 ) {
     val listState      = rememberLazyListState()
     val totalItemCount by remember { derivedStateOf { listState.layoutInfo.totalItemsCount } }
@@ -440,9 +443,9 @@ fun PersonaTranscript(
                 },
             ) {
                 if (entry.message.isOutgoing) {
-                    PersonaOutgoingMessage(entry = entry, modifier = lineModifier.then(longPressModifier))
+                    PersonaOutgoingMessage(entry = entry, showTimestamps = showTimestamps, modifier = lineModifier.then(longPressModifier))
                 } else {
-                    PersonaIncomingMessage(entry = entry, modifier = lineModifier.then(longPressModifier))
+                    PersonaIncomingMessage(entry = entry, showTimestamps = showTimestamps, modifier = lineModifier.then(longPressModifier))
                 }
 
                 val msgReactions = reactions[entry.message.id]

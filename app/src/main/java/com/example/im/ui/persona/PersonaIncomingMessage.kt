@@ -38,10 +38,14 @@ import java.time.format.DateTimeFormatter
  *  - [TimestampBadge] overlapping top-left corner of the bubble
  */
 @Composable
-fun PersonaIncomingMessage(entry: PersonaEntry, modifier: Modifier = Modifier) {
+fun PersonaIncomingMessage(
+    entry:          PersonaEntry,
+    showTimestamps: Boolean  = true,
+    modifier:       Modifier = Modifier,
+) {
     IncomingEntryLayout(
         avatar   = { PersonaAvatar(entry) },
-        textBox  = { IncomingTextBox(entry) },
+        textBox  = { IncomingTextBox(entry, showTimestamps) },
         modifier = Modifier
             .padding(horizontal = 8.dp)
             .then(modifier),
@@ -89,7 +93,7 @@ private fun IncomingEntryLayout(
  * the same [incomingInnerBox] shape as the bubble interior.
  */
 @Composable
-private fun IncomingTextBox(entry: PersonaEntry) {
+private fun IncomingTextBox(entry: PersonaEntry, showTimestamps: Boolean = true) {
     val density = LocalDensity.current
     val msg     = entry.message
 
@@ -183,12 +187,14 @@ private fun IncomingTextBox(entry: PersonaEntry) {
         }
 
         // Timestamp badge — white P5 parallelogram, top-left of bubble.
-        TimestampBadge(
-            timestamp = entry.message.timestamp,
-            modifier  = Modifier
-                .align(Alignment.TopStart)
-                .offset(x = 26.dp, y = (-9).dp),
-        )
+        if (showTimestamps) {
+            TimestampBadge(
+                timestamp = entry.message.timestamp,
+                modifier  = Modifier
+                    .align(Alignment.TopStart)
+                    .offset(x = 32.dp, y = (-9).dp),
+            )
+        }
     }
 }
 
@@ -228,6 +234,6 @@ internal fun TimestampBadge(
                     style   = Stroke(width = with(density) { 1.5.dp.toPx() }),
                 )
             }
-            .padding(horizontal = 6.dp, vertical = 2.dp),
+            .padding(horizontal = 6.dp, vertical = 1.dp),
     )
 }

@@ -30,7 +30,11 @@ import androidx.compose.ui.unit.sp
  * Timestamp badge overlaps the top-right corner of the bubble.
  */
 @Composable
-fun PersonaOutgoingMessage(entry: PersonaEntry, modifier: Modifier = Modifier) {
+fun PersonaOutgoingMessage(
+    entry:          PersonaEntry,
+    showTimestamps: Boolean  = true,
+    modifier:       Modifier = Modifier,
+) {
     val density = LocalDensity.current
     val msg     = entry.message
 
@@ -110,12 +114,14 @@ fun PersonaOutgoingMessage(entry: PersonaEntry, modifier: Modifier = Modifier) {
             }
 
             // Timestamp badge overlaps top-right corner of the bubble.
-            TimestampBadge(
-                timestamp = msg.timestamp,
-                modifier  = Modifier
-                    .align(Alignment.TopEnd)
-                    .offset(x = 2.dp, y = (-9).dp),
-            )
+            if (showTimestamps) {
+                TimestampBadge(
+                    timestamp = msg.timestamp,
+                    modifier  = Modifier
+                        .align(Alignment.TopEnd)
+                        .offset(x = (-4).dp, y = (-9).dp),
+                )
+            }
         }
     }
 }

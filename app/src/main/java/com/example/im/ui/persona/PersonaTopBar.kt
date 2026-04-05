@@ -188,7 +188,7 @@ private fun TopBarAvatar(
 // ── Back arrow ────────────────────────────────────────────────────────────────
 
 @Composable
-private fun BackArrow(onClick: () -> Unit, modifier: Modifier = Modifier) {
+internal fun BackArrow(onClick: () -> Unit, modifier: Modifier = Modifier) {
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier

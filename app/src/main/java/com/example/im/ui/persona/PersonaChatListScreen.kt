@@ -24,7 +24,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -55,8 +54,9 @@ import java.time.format.DateTimeFormatter
 
 @Composable
 fun PersonaChatListScreen(
-    chats:       List<ChatPreview>      = SampleChatList,
-    onChatClick: (ChatPreview) -> Unit  = {},
+    chats:           List<ChatPreview>     = SampleChatList,
+    onChatClick:     (ChatPreview) -> Unit = {},
+    onSettingsClick: () -> Unit            = {},
 ) {
     Box(
         modifier = Modifier
@@ -86,7 +86,10 @@ fun PersonaChatListScreen(
         )
 
         // ── Bottom navigation bar overlay ────────────────────────────────────
-        ChatListNavBar(modifier = Modifier.align(Alignment.BottomStart))
+        ChatListNavBar(
+            onSettingsClick = onSettingsClick,
+            modifier        = Modifier.align(Alignment.BottomStart),
+        )
     }
 }
 
@@ -425,7 +428,7 @@ private fun AddChatButton(modifier: Modifier = Modifier) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 @Composable
-private fun ChatListNavBar(modifier: Modifier = Modifier) {
+private fun ChatListNavBar(onSettingsClick: () -> Unit = {}, modifier: Modifier = Modifier) {
     // Outer Column has a solid black background that extends ALL the way to the
     // bottom edge of the screen, covering the system navigation bar area so no
     // red "gap" is visible below the angled bar.
@@ -456,9 +459,9 @@ private fun ChatListNavBar(modifier: Modifier = Modifier) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment     = Alignment.CenterVertically,
             ) {
-                NavBarItem(icon = Icons.Default.Home,     label = "Chats",    active = true)
-                NavBarItem(icon = Icons.Default.Person,   label = "Contacts", active = false)
-                NavBarItem(icon = Icons.Default.Settings, label = "Settings", active = false)
+                NavBarItem(icon = Icons.Default.Home,   label = "Chats",    active = true)
+                NavBarItem(icon = Icons.Default.Person, label = "Contacts", active = false)
+                SettingsNavBarItem(active = false, onClick = onSettingsClick)
             }
         }
 
@@ -501,4 +504,59 @@ private fun NavBarItem(
             fontWeight = if (active) FontWeight.Black else FontWeight.Normal,
         )
     }
+}
+
+@Composable
+private fun SettingsNavBarItem(active: Boolean, onClick: () -> Unit = {}) {
+    val tint = if (active) PersonaRed else Color.White.copy(alpha = 0.55f)
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clickable(
+                indication        = null,
+                interactionSource = remember { MutableInteractionSource() },
+                onClick           = onClick,
+            )
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+    ) {
+        GearIcon(tint = tint)
+        Text(
+            text       = "Settings",
+            fontFamily = PersonaFont,
+            fontSize   = 8.sp,
+            color      = tint,
+            fontWeight = if (active) FontWeight.Black else FontWeight.Normal,
+        )
+    }
+}
+
+@Composable
+private fun GearIcon(tint: Color, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .size(20.dp)
+            .drawWithCache {
+                val cx     = size.width / 2f
+                val cy     = size.height / 2f
+                val outer  = size.width * 0.46f
+                val inner  = size.width * 0.30f
+                val holeR  = size.width * 0.15f
+                val teeth  = 8
+
+                val path = androidx.compose.ui.graphics.Path()
+                for (i in 0 until teeth * 2) {
+                    val angle = (i * Math.PI / teeth - Math.PI / 2).toFloat()
+                    val r = if (i % 2 == 0) outer else inner
+                    val x = cx + r * kotlin.math.cos(angle)
+                    val y = cy + r * kotlin.math.sin(angle)
+                    if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                }
+                path.close()
+
+                onDrawBehind {
+                    drawPath(path, tint)
+                    drawCircle(Color.Black, holeR, center = androidx.compose.ui.geometry.Offset(cx, cy))
+                }
+            },
+    ) {}
 }
