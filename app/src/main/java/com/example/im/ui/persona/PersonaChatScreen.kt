@@ -48,7 +48,6 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
@@ -140,14 +139,6 @@ fun PersonaChatScreen(
         )
 
         // ── Context menu overlay ─────────────────────────────────────────────
-        // ── Debug FAB — inject a test incoming message ───────────────────────
-        DebugIncomingButton(
-            onClick  = { state.sendTestIncoming() },
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = 16.dp, bottom = 110.dp),
-        )
-
         selectedEntry?.let { entry ->
             PersonaMessageMenu(
                 entry         = entry,
@@ -162,25 +153,6 @@ fun PersonaChatScreen(
                 onExpandEmoji = { showEmojiPanel = true },
             )
         }
-    }
-}
-
-// ── Debug FAB ────────────────────────────────────────────────────────────────
-
-@Composable
-private fun DebugIncomingButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = modifier
-            .size(44.dp)
-            .background(Color.Yellow, CircleShape)
-            .clickable(
-                indication        = null,
-                interactionSource = remember { MutableInteractionSource() },
-                onClick           = onClick,
-            ),
-    ) {
-        Text("👤", fontSize = 18.sp)
     }
 }
 

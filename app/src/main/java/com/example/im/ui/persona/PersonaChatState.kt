@@ -28,12 +28,10 @@ private val BetterEaseOutBack: Easing = Easing { fraction ->
 
 // ---------------------------------------------------------------------------
 // Entry — equivalent to the reference Entry data class.
-// Carries all animated State<Float> values needed by each composable.
 // ---------------------------------------------------------------------------
 
 data class PersonaEntry(
     val message: TelegramMessage,
-    /** Non-null for incoming messages; null for outgoing. */
     val participant: ChatParticipant?,
     val lineCoordinates: LineCoordinates,
     val drawPunctuation: Boolean,
@@ -46,217 +44,238 @@ data class PersonaEntry(
     val punctuationScale: State<Float>,
 )
 
-/** Left/right X-span of the connecting line segment anchored to this entry. */
 data class LineCoordinates(
     val leftPoint: Offset,
     val rightPoint: Offset,
 )
 
 // ---------------------------------------------------------------------------
-// TranscriptSizes — mirrors the object from the reference exactly.
+// TranscriptSizes
 // ---------------------------------------------------------------------------
 
 object TranscriptSizes {
     val AvatarSize   = PersonaSizes.AvatarSize
     val EntrySpacing = PersonaSizes.EntrySpacing
 
-    /**
-     * Returns the top-of-entry drawing offset for the connecting line.
-     *
-     * Outgoing lineCoordinates are stored in screen-absolute X (see createEntryState),
-     * so no horizontal shift is needed here for either sender direction.
-     */
     fun getTopDrawingOffset(scope: CacheDrawScope, entry: PersonaEntry): Offset = Offset.Zero
 
-    /**
-     * Returns the bottom-of-entry drawing offset for the connecting line.
-     *
-     * X is always 0 because lineCoordinates already encode the correct screen-absolute X.
-     * Previously the X shift used [CacheDrawScope.size.width], which broke for incoming
-     * entries (narrower than full screen width) pointing to outgoing entries.
-     */
     fun getBottomDrawingOffset(scope: CacheDrawScope, entry: PersonaEntry): Offset = with(scope) {
         Offset(x = 0f, y = size.height + EntrySpacing.toPx())
     }
 }
 
 // ---------------------------------------------------------------------------
-// PersonaChatState — drives the advance-one-at-a-time reveal mechanic.
+// rememberPersonaChatState
 // ---------------------------------------------------------------------------
 
+/**
+ * @param onSend  Called when the user submits a message via the input field.
+ *                Use this to forward the text to the real network layer.
+ */
 @Composable
 fun rememberPersonaChatState(
     participants: Map<Long, ChatParticipant> = SampleParticipants,
-    messages: List<TelegramMessage> = SampleMessages,
+    messages:     List<TelegramMessage>      = SampleMessages,
+    onSend:       (String) -> Unit           = {},
 ): PersonaChatState {
     val density      = LocalDensity.current
     val scope        = rememberCoroutineScope()
-    // screenWidthPx is used to store outgoing lineCoordinates in screen-absolute X,
-    // so the connecting line reaches the outgoing bubble from ANY entry width.
-    val screenWidthPx = with(density) { LocalConfiguration.current.screenWidthDp.toFloat() * density.density }
+    val screenWidthPx = with(density) {
+        LocalConfiguration.current.screenWidthDp.toFloat() * density.density
+    }
     return remember(density, screenWidthPx) {
-        PersonaChatState(density, scope, participants, messages, screenWidthPx)
+        PersonaChatState(density, scope, participants, messages, screenWidthPx, onSend)
     }
 }
 
+// ---------------------------------------------------------------------------
+// PersonaChatState
+// ---------------------------------------------------------------------------
+
 @Stable
 class PersonaChatState internal constructor(
-    private val density: Density,
+    private val density:       Density,
     private val coroutineScope: CoroutineScope,
-    private val participants: Map<Long, ChatParticipant>,
-    private val allMessages: List<TelegramMessage>,
-    /** Full screen width in px — used to anchor outgoing line coordinates to the right edge. */
+    private val participants:  Map<Long, ChatParticipant>,
+    private val allMessages:   List<TelegramMessage>,
     private val screenWidthPx: Float = 0f,
+    private val onSend:        (String) -> Unit = {},
 ) {
-    private var cursor = 0
-    private var nextId = 100L
+    private var cursor     = 0
+    private var nextId     = 100L
     private val entryStates = mutableListOf<EntryState>()
-    private val _entries = mutableStateOf<List<PersonaEntry>>(emptyList())
+    private val _entries   = mutableStateOf<List<PersonaEntry>>(emptyList())
     val entries: List<PersonaEntry> get() = _entries.value
 
-    /** Send a custom outgoing message from the input field. */
+    /** True after [loadHistory] has been called once — prevents double-loads. */
+    var historyLoaded = false
+        private set
+
+    // ── Public API ────────────────────────────────────────────────────────────
+
+    /**
+     * Send an outgoing message: appends it locally AND forwards it via [onSend].
+     * Used by the input field in [PersonaChatScreen].
+     */
     fun sendMessage(text: String) {
         if (text.isBlank()) return
+        val trimmed = text.trim()
         val msg = TelegramMessage(
             id         = nextId++,
-            text       = text.trim(),
+            text       = trimmed,
             senderId   = 0L,
             senderName = "Me",
             timestamp  = System.currentTimeMillis(),
             isOutgoing = true,
         )
-        appendMessage(msg)
+        appendMessage(msg, animated = true)
+        onSend(trimmed)
     }
 
-    /** Show the next pre-set message from the sample conversation. */
+    /**
+     * Receive an incoming message from the server and animate it in.
+     * Call this from a `LaunchedEffect` that collects the WS incoming flow.
+     */
+    fun receiveIncoming(msg: TelegramMessage) {
+        appendMessage(msg, animated = true)
+    }
+
+    /**
+     * Populate the transcript with historical messages instantly (no pop-in).
+     * Safe to call multiple times — only the first call takes effect.
+     */
+    fun loadHistory(messages: List<TelegramMessage>) {
+        if (historyLoaded || messages.isEmpty()) return
+        historyLoaded = true
+        entryStates.clear()
+        cursor = 0
+        messages.forEach { msg ->
+            entryStates += createEntryState(entryStates.size, msg, animated = false)
+        }
+        // Draw all connecting lines immediately
+        _entries.value = entryStates.map { it.toEntry() }
+    }
+
+    /** Show the next pre-set message from the sample conversation (demo mode). */
     fun advance() {
         if (cursor >= allMessages.size) {
             cursor = 0
             entryStates.clear()
         }
-
-        val msg = allMessages[cursor++]
-        appendMessage(msg)
+        appendMessage(allMessages[cursor++], animated = true)
     }
 
-    private fun appendMessage(msg: TelegramMessage) {
-        entryStates += createEntryState(entryStates.size, msg)
+    fun advanceAll() {
+        while (cursor < allMessages.size) advance()
+    }
 
-        if (entryStates.size > 1) {
+    /** Debug helper — inject a random incoming test message. */
+    fun sendTestIncoming() {
+        val participant = participants.values.randomOrNull() ?: return
+        appendMessage(
+            TelegramMessage(
+                id         = nextId++,
+                text       = "Test message $nextId 👋",
+                senderId   = participant.id,
+                senderName = participant.name,
+                timestamp  = System.currentTimeMillis(),
+                isOutgoing = false,
+            ),
+            animated = true,
+        )
+    }
+
+    // ── Internal ──────────────────────────────────────────────────────────────
+
+    private fun appendMessage(msg: TelegramMessage, animated: Boolean) {
+        entryStates += createEntryState(entryStates.size, msg, animated)
+
+        if (animated && entryStates.size > 1) {
             finalizeEntryState(entryStates[entryStates.lastIndex - 1])
         }
 
         _entries.value = entryStates.map { it.toEntry() }
     }
 
-    /** Advance all remaining messages at once (auto-play). */
-    fun advanceAll() {
-        while (cursor < allMessages.size) advance()
-    }
-
-    /** Inject a test incoming message from a random participant (debug only). */
-    fun sendTestIncoming() {
-        val participant = participants.values.randomOrNull() ?: return
-        val msg = TelegramMessage(
-            id         = nextId++,
-            text       = "Test message ${nextId} 👋",
-            senderId   = participant.id,
-            senderName = participant.name,
-            timestamp  = System.currentTimeMillis(),
-            isOutgoing = false,
-        )
-        appendMessage(msg)
-    }
-
-    private fun createEntryState(index: Int, msg: TelegramMessage): EntryState = with(density) {
-        val width = randomBetween(
-            PersonaSizes.MinLineWidth.toPx(),
-            PersonaSizes.MaxLineWidth.toPx(),
-        )
-
-        // Apply the horizontal shift HERE at creation time so that lineCoordinates
-        // never change after the entry is first rendered.  Previously the shift was
-        // applied in finalizeEntryState (when the *next* message arrived), which
-        // caused the already-fully-drawn N-2→N-1 line to jump because its bottom
-        // endpoint (= entry N-1's lineCoordinates) suddenly changed.
-        val direction      = if (index % 2 == 0) 1f else -1f
-        val horizontalShift = if (index > 0) {
-            randomBetween(PersonaSizes.MinLineShift.toPx(), PersonaSizes.MaxLineShift.toPx()) * direction
-        } else 0f
-
-        val lineCoordinates = if (msg.isOutgoing) {
-            val cx = PersonaSizes.OutgoingCenterX.toPx()
-            val cy = PersonaSizes.OutgoingCenterY.toPx()
-            // Store X in screen-absolute terms: (screenWidth - cx) is the right-side anchor.
-            // This makes getTopDrawingOffset / getBottomDrawingOffset return x=0 (no shift),
-            // so the line endpoint is correct regardless of which entry's drawConnectingLine
-            // is computing the coordinates (incoming entries are narrower than screen width).
-            val anchorX = if (screenWidthPx > 0f) screenWidthPx - cx else cx
-            LineCoordinates(
-                leftPoint  = Offset(anchorX - width / 2f, cy),
-                rightPoint = Offset(anchorX + width / 2f, cy),
+    private fun createEntryState(index: Int, msg: TelegramMessage, animated: Boolean): EntryState =
+        with(density) {
+            val width = randomBetween(
+                PersonaSizes.MinLineWidth.toPx(),
+                PersonaSizes.MaxLineWidth.toPx(),
             )
-        } else {
-            val avatarCenterX = PersonaSizes.AvatarSize.width.toPx() / 2f
-            val avatarCenterY = PersonaSizes.AvatarSize.height.toPx() / 2f
-            LineCoordinates(
-                leftPoint  = Offset(avatarCenterX - width / 2f + horizontalShift, avatarCenterY),
-                rightPoint = Offset(avatarCenterX + width / 2f + horizontalShift, avatarCenterY),
+
+            val direction       = if (index % 2 == 0) 1f else -1f
+            val horizontalShift = if (index > 0)
+                randomBetween(PersonaSizes.MinLineShift.toPx(), PersonaSizes.MaxLineShift.toPx()) * direction
+            else 0f
+
+            val lineCoordinates = if (msg.isOutgoing) {
+                val cx     = PersonaSizes.OutgoingCenterX.toPx()
+                val cy     = PersonaSizes.OutgoingCenterY.toPx()
+                val anchorX = if (screenWidthPx > 0f) screenWidthPx - cx else cx
+                LineCoordinates(
+                    leftPoint  = Offset(anchorX - width / 2f, cy),
+                    rightPoint = Offset(anchorX + width / 2f, cy),
+                )
+            } else {
+                val ax = PersonaSizes.AvatarSize.width.toPx() / 2f
+                val ay = PersonaSizes.AvatarSize.height.toPx() / 2f
+                LineCoordinates(
+                    leftPoint  = Offset(ax - width / 2f + horizontalShift, ay),
+                    rightPoint = Offset(ax + width / 2f + horizontalShift, ay),
+                )
+            }
+
+            // For history entries, start all animatables at their final value.
+            val lineFinal = if (animated) 0f else 1f
+            val scaleFinal = if (animated) 0f else 1f
+
+            EntryState(
+                position         = index,
+                message          = msg,
+                participant      = participants[msg.senderId],
+                lineCoordinates  = lineCoordinates,
+                lineProgress     = Animatable(lineFinal),
+                avatarBackgroundScale = Animatable(if (animated) 0.6f else 1f).also { a ->
+                    if (animated) coroutineScope.launch {
+                        a.animateTo(1f, tween(180, easing = BetterEaseOutBack))
+                    }
+                },
+                avatarForegroundScale = Animatable(scaleFinal).also { a ->
+                    if (animated) coroutineScope.launch {
+                        delay(80L); a.snapTo(0.8f)
+                        a.animateTo(1f, tween(90, easing = BetterEaseOutBack))
+                    }
+                },
+                messageHorizontalScale = Animatable(if (animated) 0.3f else 1f).also { a ->
+                    if (animated) coroutineScope.launch {
+                        a.animateTo(1f, tween(110, easing = BetterEaseOutBack))
+                    }
+                },
+                messageVerticalScale = Animatable(if (animated) 0.8f else 1f).also { a ->
+                    if (animated) coroutineScope.launch {
+                        a.animateTo(1f, tween(110, easing = BetterEaseOutBack))
+                    }
+                },
+                messageTextAlpha = Animatable(scaleFinal).also { a ->
+                    if (animated) coroutineScope.launch {
+                        delay(50L); a.animateTo(1f, tween(80))
+                    }
+                },
+                punctuationScale = Animatable(
+                    if (!animated && msg.text.endsWith('?')) 1f else 0f
+                ).also { a ->
+                    if (animated && msg.text.endsWith('?')) coroutineScope.launch {
+                        delay(70L); a.snapTo(0.4f)
+                        a.animateTo(1f, tween(60))
+                    }
+                },
             )
         }
 
-        EntryState(
-            position         = index,
-            message          = msg,
-            participant      = participants[msg.senderId],
-            lineCoordinates  = lineCoordinates,
-            lineProgress     = Animatable(0f),
-            avatarBackgroundScale = Animatable(0.6f).also { anim ->
-                coroutineScope.launch {
-                    anim.animateTo(1f, tween(300, easing = BetterEaseOutBack))
-                }
-            },
-            avatarForegroundScale = Animatable(0f).also { anim ->
-                coroutineScope.launch {
-                    delay(160L)
-                    anim.snapTo(0.8f)
-                    anim.animateTo(1f, tween(150, easing = BetterEaseOutBack))
-                }
-            },
-            messageHorizontalScale = Animatable(0.3f).also { anim ->
-                coroutineScope.launch {
-                    anim.animateTo(1f, tween(180, easing = BetterEaseOutBack))
-                }
-            },
-            messageVerticalScale = Animatable(0.8f).also { anim ->
-                coroutineScope.launch {
-                    anim.animateTo(1f, tween(180, easing = BetterEaseOutBack))
-                }
-            },
-            messageTextAlpha = Animatable(0f).also { anim ->
-                coroutineScope.launch {
-                    delay(100L)
-                    anim.animateTo(1f, tween(130))
-                }
-            },
-            punctuationScale = Animatable(0f).also { anim ->
-                if (msg.text.endsWith('?')) {
-                    coroutineScope.launch {
-                        delay(130L)
-                        anim.snapTo(0.4f)
-                        anim.animateTo(1f, tween(100))
-                    }
-                }
-            },
-        )
-    }
-
-    /** Triggers the connecting-line grow animation on the previous entry. */
     private fun finalizeEntryState(state: EntryState) {
-        // lineCoordinates are already in their final position (shift was applied at
-        // createEntryState time), so we only need to start the grow animation here.
         coroutineScope.launch {
-            state.lineProgress.animateTo(1f, tween(180))
+            state.lineProgress.animateTo(1f, tween(100))
         }
     }
 }
@@ -269,17 +288,17 @@ private fun randomBetween(start: Float, end: Float): Float =
     start + Random.nextFloat() * (end - start)
 
 private class EntryState(
-    val position: Int,
-    val message: TelegramMessage,
-    val participant: ChatParticipant?,
-    var lineCoordinates: LineCoordinates,
-    val lineProgress: Animatable<Float, AnimationVector1D>,
+    val position:              Int,
+    val message:               TelegramMessage,
+    val participant:           ChatParticipant?,
+    var lineCoordinates:       LineCoordinates,
+    val lineProgress:          Animatable<Float, AnimationVector1D>,
     val avatarBackgroundScale: Animatable<Float, AnimationVector1D>,
     val avatarForegroundScale: Animatable<Float, AnimationVector1D>,
     val messageHorizontalScale: Animatable<Float, AnimationVector1D>,
-    val messageVerticalScale: Animatable<Float, AnimationVector1D>,
-    val messageTextAlpha: Animatable<Float, AnimationVector1D>,
-    val punctuationScale: Animatable<Float, AnimationVector1D>,
+    val messageVerticalScale:  Animatable<Float, AnimationVector1D>,
+    val messageTextAlpha:      Animatable<Float, AnimationVector1D>,
+    val punctuationScale:      Animatable<Float, AnimationVector1D>,
 )
 
 private fun EntryState.toEntry() = PersonaEntry(
